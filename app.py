@@ -16,13 +16,14 @@ from config import (
     DEFAULT_MAX_TOKENS,
     SYSTEM_PROMPT_PATH,
     WEB_SEARCH_ENABLED,
+    TAVILY_MONTHLY_LIMIT,
 )
 from core.client import ApolloClient
 from core.prompt_builder import load_prompts, save_prompts, generate_prompt_via_llm, add_prompt
 from core.runner import run_parallel, ModelResult
 
 # ---------------------------------------------------------------------------
-# Configurazione pagina
+# Page config
 # ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="Share of AI",
@@ -56,11 +57,29 @@ def results_to_df(results: list[ModelResult]) -> pd.DataFrame:
             "Preferred Brand": r.preferred_brand,
             "Confidence": r.confidence,
             "Decision": r.decision,
+            "Web Search": "🔍" if r.web_search_used else "",
+            "Sources": len(r.search_results),
             "Latency (s)": r.latency_s,
             "OK": "✅" if r.success else "❌",
             "Error": r.error or r.schema_error or "",
         })
     return pd.DataFrame(rows)
+
+
+def _tavily_usage_widget() -> None:
+    """Renders the Tavily usage indicator in the sidebar."""
+    from core.web_search import get_usage
+    usage = get_usage()
+    pct = usage["count"] / TAVILY_MONTHLY_LIMIT
+    remaining = usage["remaining"]
+    color = "normal" if pct < 0.75 else ("off" if pct < 0.90 else "inverse")
+    st.sidebar.metric(
+        label=f"🔍 Tavily usage ({usage['month']})",
+        value=f"{usage['count']} / {TAVILY_MONTHLY_LIMIT}",
+        delta=f"{remaining} remaining",
+        delta_color=color,
+    )
+    st.sidebar.progress(min(pct, 1.0))
 
 
 # ---------------------------------------------------------------------------
@@ -81,15 +100,17 @@ with st.sidebar:
     temperature = st.slider("Temperature", 0.0, 1.0, DEFAULT_TEMPERATURE, 0.05)
     max_tokens = st.number_input("Max tokens", 500, 4000, DEFAULT_MAX_TOKENS, 100)
 
+    st.subheader("🔍 Web Search")
     if WEB_SEARCH_ENABLED:
-        st.subheader("🔍 Web Search")
-        use_web_search = st.toggle("Enable web search", value=False)
+        use_web_search = st.toggle("Enable web search (Tavily)", value=False)
+        if use_web_search:
+            _tavily_usage_widget()
     else:
-        st.info("🔍 Web search: coming in Phase 4")
+        st.info("Web search: coming in Phase 4")
         use_web_search = False
 
     st.divider()
-    st.caption("Share of AI — Prototype v0.1")
+    st.caption("Share of AI — Prototype v0.2")
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +134,9 @@ tab_run, tab_prompts, tab_results = st.tabs(["▶️ Run Test", "📝 Prompts", 
 
 with tab_run:
     st.header("Run Test")
+
+    if use_web_search:
+        st.info("🔍 Web search enabled — the model will search Tavily before answering.", icon="ℹ️")
 
     prompts = load_prompts()
 
@@ -164,6 +188,7 @@ with tab_run:
                     models=selected_models,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    use_web_search=use_web_search,
                 )
 
             st.session_state["last_results"] = results
@@ -294,6 +319,14 @@ with tab_results:
         r = results[selected_row]
         st.markdown(f"**Model:** `{r.model}`")
         st.markdown(f"**Prompt:** {r.user_prompt}")
+
+        if r.web_search_used and r.search_results:
+            with st.expander(f"🔍 Web sources consulted ({len(r.search_results)})"):
+                for src in r.search_results:
+                    st.markdown(f"**[{src['title']}]({src['url']})**")
+                    st.caption(src["snippet"][:300] + "..." if len(src["snippet"]) > 300 else src["snippet"])
+                    st.divider()
+
         if r.parsed_json:
             st.json(r.parsed_json)
         elif r.error:

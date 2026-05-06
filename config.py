@@ -4,6 +4,13 @@ Centralised configuration for Share of AI.
 import os
 from pathlib import Path
 
+# Load .env file if present (local development)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # --- Paths ---
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
@@ -45,5 +52,8 @@ DEFAULT_MAX_TOKENS: int = 2000
 AVAILABLE_TONES: list[str] = ["concise", "detailed", "reassuring", "technical", "emotional"]
 AVAILABLE_LANGUAGES: list[str] = ["ita", "eng", "deu", "fra", "esp"]
 
-# --- Web search (stub, not yet implemented — Phase 4) ---
-WEB_SEARCH_ENABLED: bool = False
+# --- Web search (Tavily + tool calling) ---
+WEB_SEARCH_ENABLED: bool = True
+TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY", "")
+TAVILY_MONTHLY_LIMIT: int = 1000  # free tier
+TAVILY_USAGE_PATH: Path = BASE_DIR / "tavily_usage.json"  # local only, not committed

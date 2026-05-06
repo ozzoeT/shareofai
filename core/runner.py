@@ -1,19 +1,18 @@
 """
 Test runner: executes a prompt against one or more models in parallel.
+Supports both standard mode and web search mode (tool calling).
 """
 from __future__ import annotations
 
+import json
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
 from core.client import ApolloClient
 from core.parser import parse_json_response, validate_response
-
-# Web search hook (stub for future use — Phase 4)
-# from core.web_search import search  # noqa: F401
 
 
 @dataclass
@@ -32,7 +31,8 @@ class ModelResult:
     latency_s: float = 0.0
     usage: Any = None
     error: str | None = None
-    web_search_used: bool = False  # reserved for Phase 4
+    web_search_used: bool = False
+    search_results: list[dict] = field(default_factory=list)  # [{url, title, snippet}]
 
     # Shortcut properties for quick display
     @property
@@ -51,6 +51,10 @@ class ModelResult:
     def success(self) -> bool:
         return self.error is None and self.schema_ok
 
+
+# ---------------------------------------------------------------------------
+# Single run — standard (no web search)
+# ---------------------------------------------------------------------------
 
 def _run_single(
     client: ApolloClient,
@@ -108,6 +112,116 @@ def _run_single(
         )
 
 
+# ---------------------------------------------------------------------------
+# Single run — with web search (tool calling loop)
+# ---------------------------------------------------------------------------
+
+def _run_single_with_search(
+    client: ApolloClient,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    prompt_index: int | None,
+    tone: str | None,
+    language: str | None,
+    temperature: float,
+    max_tokens: int,
+) -> ModelResult:
+    from core.web_search import WEB_SEARCH_TOOL, search, build_search_context
+
+    t0 = time.time()
+    search_results: list[dict] = []
+
+    try:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        # --- First call: offer the search tool ---
+        resp = client.chat(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            tools=[WEB_SEARCH_TOOL],
+        )
+
+        choice = resp.choices[0]
+
+        # --- Tool calling loop ---
+        while choice.finish_reason == "tool_calls":
+            tool_call = choice.message.tool_calls[0]
+            query = json.loads(tool_call.function.arguments).get("query", user_prompt)
+
+            results = search(query)
+            search_results.extend([
+                {"url": r.url, "title": r.title, "snippet": r.snippet}
+                for r in results
+            ])
+            context = build_search_context(results)
+
+            # Feed the tool result back and call again
+            messages.append(choice.message)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": context,
+            })
+
+            resp = client.chat(
+                messages=messages,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                tools=[WEB_SEARCH_TOOL],
+            )
+            choice = resp.choices[0]
+
+        # --- Final answer ---
+        content = choice.message.content
+        parsed, parse_err = parse_json_response(content)
+        schema_ok, schema_err = False, None
+        if parsed is not None and isinstance(parsed, dict):
+            schema_ok, schema_err = validate_response(parsed)
+
+        return ModelResult(
+            timestamp=datetime.now(),
+            model=model,
+            prompt_index=prompt_index,
+            tone=tone,
+            language=language,
+            user_prompt=user_prompt,
+            raw_response=content,
+            parsed_json=parsed,
+            json_parse_error=parse_err,
+            schema_ok=schema_ok,
+            schema_error=schema_err,
+            latency_s=round(time.time() - t0, 3),
+            usage=getattr(resp, "usage", None),
+            web_search_used=True,
+            search_results=search_results,
+        )
+
+    except Exception as exc:
+        return ModelResult(
+            timestamp=datetime.now(),
+            model=model,
+            prompt_index=prompt_index,
+            tone=tone,
+            language=language,
+            user_prompt=user_prompt,
+            latency_s=round(time.time() - t0, 3),
+            error=str(exc),
+            web_search_used=True,
+            search_results=search_results,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
 def run_parallel(
     client: ApolloClient,
     system_prompt: str,
@@ -116,6 +230,7 @@ def run_parallel(
     temperature: float = 0.2,
     max_tokens: int = 2000,
     max_workers: int = 8,
+    use_web_search: bool = False,
 ) -> list[ModelResult]:
     """
     Runs every prompt against every model in parallel.
@@ -123,10 +238,13 @@ def run_parallel(
     Args:
         prompts: list of dicts with key 'prompt', optionally 'tone' and 'language'.
         models: list of model ids to test.
+        use_web_search: if True, uses tool calling + Tavily search.
 
     Returns:
         List of ModelResult sorted by (prompt_index, model).
     """
+    runner = _run_single_with_search if use_web_search else _run_single
+
     tasks = [
         (i, item, model)
         for i, item in enumerate(prompts)
@@ -137,7 +255,7 @@ def run_parallel(
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(
-                _run_single,
+                runner,
                 client,
                 model,
                 system_prompt,
