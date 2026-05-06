@@ -161,8 +161,23 @@ def _run_single_with_search(
             ])
             context = build_search_context(results)
 
-            # Feed the tool result back and call again
-            messages.append(choice.message)
+            # Feed the tool result back — serialize assistant message to plain dict
+            # (Pydantic objects from the SDK are not accepted as message dicts by the gateway)
+            messages.append({
+                "role": "assistant",
+                "content": choice.message.content,
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": tc.type,
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
+                    }
+                    for tc in choice.message.tool_calls
+                ],
+            })
             messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call.id,
