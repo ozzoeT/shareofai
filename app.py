@@ -1,6 +1,6 @@
 """
 Share of AI — Streamlit app
-Interfaccia per testare in parallelo più LLM su raccomandazioni d'acquisto.
+Interface for testing multiple LLMs in parallel on purchase recommendation queries.
 """
 from __future__ import annotations
 
@@ -85,7 +85,7 @@ with st.sidebar:
         st.subheader("🔍 Web Search")
         use_web_search = st.toggle("Enable web search", value=False)
     else:
-        st.info("🔍 Web search: coming in Phase 4", icon="ℹ️")
+        st.info("🔍 Web search: coming in Phase 4")
         use_web_search = False
 
     st.divider()
@@ -99,9 +99,8 @@ with st.sidebar:
 st.title("🐾 Share of AI")
 st.markdown(
     """
-**Obiettivo:** testare in parallelo diversi modelli LLM simulando un utente che chiede
-consigli d'acquisto per prodotti veterinari. Analizza quali brand vengono preferiti,
-con quale confidenza e in quali scenari.
+**Goal:** test multiple LLM models in parallel by simulating a user asking for veterinary
+product purchase advice. Analyse which brands are preferred, with what confidence, and in which scenarios.
 """
 )
 
@@ -119,7 +118,6 @@ with tab_run:
 
     col1, col2 = st.columns([2, 1])
     with col1:
-        # Filtri prompt
         filter_tone = st.multiselect(
             "Filter by tone", options=AVAILABLE_TONES, default=[]
         )
@@ -138,7 +136,6 @@ with tab_run:
             * len(selected_models),
         )
 
-    # Applica filtri
     filtered = [
         p for p in prompts
         if (not filter_tone or p.get("tone") in filter_tone)
@@ -175,7 +172,6 @@ with tab_run:
             df = results_to_df(results)
             st.dataframe(df, use_container_width=True)
 
-            # Riepilogo per brand
             st.subheader("Brand preference summary")
             brand_df = (
                 df[df["OK"] == "✅"]
@@ -196,7 +192,6 @@ with tab_prompts:
 
     prompts = load_prompts()
 
-    # Visualizzazione tabellare
     prompt_df = pd.DataFrame(prompts)
     st.dataframe(prompt_df, use_container_width=True, height=300)
 
@@ -263,7 +258,6 @@ with tab_results:
         results: list[ModelResult] = st.session_state["last_results"]
         df = results_to_df(results)
 
-        # Filtri
         model_filter = st.multiselect(
             "Filter by model",
             options=df["Model"].unique().tolist(),
@@ -273,7 +267,6 @@ with tab_results:
 
         st.dataframe(filtered_df, use_container_width=True)
 
-        # Pivot: brand preference per modello
         st.subheader("Brand × Model heatmap (count)")
         ok_df = filtered_df[filtered_df["OK"] == "✅"]
         if not ok_df.empty:
@@ -284,7 +277,6 @@ with tab_results:
             )
             st.dataframe(pivot, use_container_width=True)
 
-        # Confidence media per modello
         st.subheader("Average confidence by model")
         if not ok_df.empty:
             conf_df = ok_df.groupby("Model")["Confidence"].mean().reset_index()
@@ -293,7 +285,6 @@ with tab_results:
         else:
             st.info("No successful results to chart.")
 
-        # Dettaglio risposta
         st.subheader("Response detail")
         selected_row = st.selectbox(
             "Select a result",

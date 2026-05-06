@@ -1,5 +1,5 @@
 """
-Test runner: esegue un prompt su uno o più modelli in parallelo.
+Test runner: executes a prompt against one or more models in parallel.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from typing import Any
 from core.client import ApolloClient
 from core.parser import parse_json_response, validate_response
 
-# Web search hook (predisposto per uso futuro)
+# Web search hook (stub for future use — Phase 4)
 # from core.web_search import search  # noqa: F401
 
 
@@ -32,9 +32,9 @@ class ModelResult:
     latency_s: float = 0.0
     usage: Any = None
     error: str | None = None
-    web_search_used: bool = False  # predisposto per Fase 4
+    web_search_used: bool = False  # reserved for Phase 4
 
-    # Shortcut properties per visualizzazione rapida
+    # Shortcut properties for quick display
     @property
     def preferred_brand(self) -> str:
         return (self.parsed_json or {}).get("preferred_brand", "")
@@ -118,14 +118,14 @@ def run_parallel(
     max_workers: int = 8,
 ) -> list[ModelResult]:
     """
-    Esegue ogni prompt su ogni modello in parallelo.
+    Runs every prompt against every model in parallel.
 
     Args:
-        prompts: lista di dict con chiavi 'prompt', opzionalmente 'tone', 'language'.
-        models: lista di model id da testare.
+        prompts: list of dicts with key 'prompt', optionally 'tone' and 'language'.
+        models: list of model ids to test.
 
     Returns:
-        Lista di ModelResult ordinata per (prompt_index, model).
+        List of ModelResult sorted by (prompt_index, model).
     """
     tasks = [
         (i, item, model)

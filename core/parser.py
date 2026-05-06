@@ -1,5 +1,5 @@
 """
-Parsing e validazione delle risposte JSON strutturate dei modelli.
+Parsing and validation of structured JSON responses from models.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ REQUIRED_KEYS = [
 
 
 def _fix_newlines_in_strings(s: str) -> str:
-    """Converte newline letterali dentro stringhe JSON in \\n escaped."""
+    """Converts literal newlines inside JSON strings into escaped \\n."""
     result = []
     in_string = False
     escape_next = False
@@ -44,25 +44,25 @@ def _fix_newlines_in_strings(s: str) -> str:
 
 def parse_json_response(raw: str) -> tuple[dict | None, str | None]:
     """
-    Tenta di parsare una stringa JSON (potenzialmente sporca).
-    Restituisce (dict, None) in caso di successo, (None, errore) altrimenti.
+    Attempts to parse a (potentially dirty) JSON string.
+    Returns (dict, None) on success, (None, error message) otherwise.
     """
     cleaned = raw.strip()
 
-    # Prova diretta
+    # Direct attempt
     try:
         return json.loads(cleaned), None
     except json.JSONDecodeError:
         pass
 
-    # Fix newline letterali nelle stringhe
+    # Fix literal newlines inside strings
     cleaned = _fix_newlines_in_strings(cleaned)
     try:
         return json.loads(cleaned), None
     except json.JSONDecodeError:
         pass
 
-    # Rimuovi caratteri di controllo residui
+    # Strip residual control characters
     cleaned = re.sub(r"[\x00-\x1f\x7f](?=[^\"]*(?:\"[^\"]*\"[^\"]*)*$)", "", cleaned)
     try:
         return json.loads(cleaned), None
@@ -72,8 +72,8 @@ def parse_json_response(raw: str) -> tuple[dict | None, str | None]:
 
 def validate_response(obj: dict) -> tuple[bool, str | None]:
     """
-    Valida che il dict rispetti lo schema atteso.
-    Restituisce (True, None) se valido, (False, messaggio) altrimenti.
+    Validates that the dict matches the expected schema.
+    Returns (True, None) if valid, (False, message) otherwise.
     """
     missing = [k for k in REQUIRED_KEYS if k not in obj]
     if missing:

@@ -1,10 +1,10 @@
 """
-Configurazione centralizzata per Share of AI.
+Centralised configuration for Share of AI.
 """
 import os
 from pathlib import Path
 
-# --- Percorsi ---
+# --- Paths ---
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
 SYSTEM_PROMPT_PATH = DATA_DIR / "system_prompt.txt"
@@ -22,24 +22,28 @@ APOLLO_BASE_URL = os.getenv(
     "https://api-gw.boehringer-ingelheim.com/apollo/llm-api",
 )
 
-# --- Modelli disponibili (aggiornare in base a client.models.list()) ---
+# --- Available models (update based on client.models.list()) ---
 AVAILABLE_MODELS: list[str] = [
     "claude_3_5_haiku",
     "claude_3_5_sonnet",
     "claude_4_5_sonnet",
+    "claude_4_6_sonnet",
+    "claude_4_7_opus",
     "gpt-4o-mini",
     "gpt-4o",
+    "gpt-5",
+    "gpt-5-mini",
 ]
 
 DEFAULT_MODELS: list[str] = ["claude_3_5_haiku", "gpt-4o-mini"]
 
-# --- Parametri LLM ---
+# --- LLM parameters ---
 DEFAULT_TEMPERATURE: float = 0.2
 DEFAULT_MAX_TOKENS: int = 2000
 
-# --- Toni disponibili per la generazione prompt ---
+# --- Available tones for prompt generation ---
 AVAILABLE_TONES: list[str] = ["concise", "detailed", "reassuring", "technical", "emotional"]
 AVAILABLE_LANGUAGES: list[str] = ["ita", "eng", "deu", "fra", "esp"]
 
-# --- Web search (predisposto, non ancora implementato) ---
+# --- Web search (stub, not yet implemented — Phase 4) ---
 WEB_SEARCH_ENABLED: bool = False

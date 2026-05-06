@@ -1,9 +1,9 @@
 """
-Generazione e gestione dei prompt.
-Supporta:
-  - caricamento da file JSON
-  - generazione via LLM a partire da topic + tono + lingua
-  - salvataggio di nuovi prompt
+Prompt management and generation.
+Supports:
+  - loading from JSON file
+  - LLM-based generation from topic + tone + language
+  - saving new prompts to the library
 """
 from __future__ import annotations
 
@@ -43,25 +43,25 @@ _LANGUAGE_NAMES = {
 
 
 def load_prompts(path: Path = PROMPTS_PATH) -> list[dict]:
-    """Carica i prompt dal file JSON."""
+    """Loads prompts from the JSON file."""
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def save_prompts(prompts: list[dict], path: Path = PROMPTS_PATH) -> None:
-    """Salva la lista di prompt nel file JSON."""
+    """Saves the prompt list to the JSON file."""
     with open(path, "w", encoding="utf-8") as f:
         json.dump(prompts, f, ensure_ascii=False, indent=2)
 
 
 def build_generation_prompt(topic: str, tone: str, language: str) -> str:
     """
-    Costruisce il prompt da inviare al LLM per generare un nuovo prompt utente.
+    Builds the meta-prompt to send to the LLM for generating a new user prompt.
 
     Args:
-        topic: argomento (es. "flea and tick prevention for a large dog")
-        tone: uno dei AVAILABLE_TONES
-        language: codice lingua (ita, eng, ...)
+        topic: subject matter (e.g. "flea and tick prevention for a large dog")
+        tone: one of AVAILABLE_TONES
+        language: language code (ita, eng, ...)
     """
     tone_instruction = _TONE_INSTRUCTIONS.get(tone, _TONE_INSTRUCTIONS["concise"])
     lang_name = _LANGUAGE_NAMES.get(language, "English")
@@ -82,10 +82,10 @@ def generate_prompt_via_llm(
     temperature: float = 0.7,
 ) -> str:
     """
-    Usa il client Apollo per generare un nuovo prompt utente.
+    Uses the Apollo client to generate a new user prompt.
 
     Returns:
-        Testo del prompt generato.
+        Generated prompt text.
     """
     generation_prompt = build_generation_prompt(topic, tone, language)
     resp = client.chat(
@@ -103,6 +103,6 @@ def add_prompt(
     tone: str,
     language: str,
 ) -> list[dict]:
-    """Aggiunge un nuovo prompt alla lista (senza salvare su disco)."""
+    """Adds a new prompt to the list (without saving to disk)."""
     prompts.append({"tone": tone, "language": language, "prompt": prompt_text})
     return prompts

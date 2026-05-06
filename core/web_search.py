@@ -1,13 +1,13 @@
 """
-Web search tool — FASE 4 (non ancora implementato).
+Web search tool — Phase 4 (not yet implemented).
 
-Questo modulo è predisposto per integrare la ricerca web nelle query LLM,
-simulando l'esperienza reale di utenti su piattaforme come Gemini, ChatGPT, Claude.ai.
+This module is a stub for integrating web search into LLM queries,
+simulating the real user experience on platforms like Gemini, ChatGPT, Claude.ai.
 
-Architettura prevista:
-- Provider multipli: Tavily, Bing, Google Custom Search, Serper
-- Tool calling: iniettare search come tool nelle chiamate LLM che lo supportano
-- Risultati taggati: ogni ModelResult avrà web_search_used=True e i snippet usati
+Planned architecture:
+- Multiple providers: Tavily, Bing, Google Custom Search, Serper
+- Tool calling: inject search as a tool in LLM calls that support it
+- Tagged results: each ModelResult will carry web_search_used=True and the snippets used
 """
 from __future__ import annotations
 
@@ -24,18 +24,18 @@ class SearchResult:
 
 def search(query: str, max_results: int = 5) -> list[SearchResult]:
     """
-    Esegue una ricerca web e restituisce i risultati.
-    [NON IMPLEMENTATO — Fase 4]
+    Performs a web search and returns the results.
+    [NOT IMPLEMENTED — Phase 4]
     """
     raise NotImplementedError(
-        "Web search non ancora implementato. "
-        "Implementare in Fase 4 con provider Tavily/Bing/Google."
+        "Web search not yet implemented. "
+        "To be added in Phase 4 with a Tavily/Bing/Google provider."
     )
 
 
 def build_search_context(results: list[SearchResult]) -> str:
     """
-    Formatta i risultati di ricerca come contesto da iniettare nel prompt.
-    [NON IMPLEMENTATO — Fase 4]
+    Formats search results as context to inject into the prompt.
+    [NOT IMPLEMENTED — Phase 4]
     """
-    raise NotImplementedError("Web search non ancora implementato.")
+    raise NotImplementedError("Web search not yet implemented.")
