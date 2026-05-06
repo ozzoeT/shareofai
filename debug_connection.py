@@ -50,3 +50,24 @@ try:
     print(f"  OK — response: {resp.choices[0].message.content!r}")
 except Exception as e:
     print(f"  FAIL — {e}")
+
+print("\n=== Step 6: tool calling support ===")
+try:
+    resp = client.chat.completions.create(
+        model="claude_3_5_haiku",
+        messages=[{"role": "user", "content": "What is 2+2?"}],
+        tools=[{
+            "type": "function",
+            "function": {
+                "name": "test_tool",
+                "description": "A test tool",
+                "parameters": {"type": "object", "properties": {}},
+            }
+        }],
+        max_tokens=50,
+    )
+    finish_reason = resp.choices[0].finish_reason
+    print(f"  OK — tool calling supported (finish_reason: {finish_reason!r})")
+except Exception as e:
+    print(f"  FAIL — tool calling not supported: {e}")
+    print("  → will use pre-fetch + inject approach instead")
