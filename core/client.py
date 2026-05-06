@@ -58,10 +58,14 @@ class ApolloClient:
         model: str,
         temperature: float = 0.2,
         max_tokens: int = 2000,
+        tools: list[dict] | None = None,
     ):
-        return self.get_client().chat.completions.create(
+        kwargs = dict(
             model=model,
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
         )
+        if tools:
+            kwargs["tools"] = tools
+        return self.get_client().chat.completions.create(**kwargs)
