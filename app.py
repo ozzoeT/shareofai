@@ -304,23 +304,44 @@ with tab_results:
 
         st.dataframe(filtered_df, use_container_width=True)
 
-        st.subheader("Brand × Model heatmap (count)")
         ok_df = filtered_df[filtered_df["OK"] == "✅"]
+
+        st.subheader("Brand mentions by model")
         if not ok_df.empty:
-            pivot = (
+            mentions = (
                 ok_df.groupby(["Preferred Brand", "Model"])
                 .size()
                 .unstack(fill_value=0)
             )
-            st.dataframe(pivot, use_container_width=True)
+            st.bar_chart(mentions)
+        else:
+            st.info("No successful results to chart.")
 
         st.subheader("Average confidence by model")
         if not ok_df.empty:
             conf_df = ok_df.groupby("Model")["Confidence"].mean().reset_index()
             conf_df.columns = ["Model", "Avg Confidence"]
             st.bar_chart(conf_df.set_index("Model"))
-        else:
-            st.info("No successful results to chart.")
+
+        web_results_all = [r for r in results if r.model in model_filter and r.web_search_used and r.search_results]
+        if web_results_all:
+            from urllib.parse import urlparse
+
+            st.subheader("🔍 Web source analytics")
+
+            all_sources = [src for r in web_results_all for src in r.search_results]
+            domains = [urlparse(src["url"]).netloc.removeprefix("www.") for src in all_sources]
+            domain_series = pd.Series(domains, name="Mentions")
+            domain_counts = domain_series.value_counts().reset_index()
+            domain_counts.columns = ["Domain", "Mentions"]
+
+            col_tbl, col_chart = st.columns([1, 2])
+            with col_tbl:
+                st.dataframe(domain_counts, use_container_width=True, hide_index=True)
+            with col_chart:
+                st.bar_chart(domain_counts.set_index("Domain"))
+
+            st.caption(f"{len(all_sources)} total sources across {len(web_results_all)} runs — {len(domain_counts)} unique domains")
 
         st.subheader("Response detail")
         selected_row = st.selectbox(
