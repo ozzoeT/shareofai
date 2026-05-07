@@ -45,7 +45,11 @@ def get_client() -> ApolloClient:
 
 @st.cache_data
 def get_system_prompt() -> str:
-    return SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
+    try:
+        return SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        st.error(f"System prompt not found: {SYSTEM_PROMPT_PATH}. Add the file and restart.")
+        st.stop()
 
 
 def json_to_results(raw: str) -> list[ModelResult]:
@@ -307,15 +311,18 @@ with tab_prompts:
             st.warning("Enter a topic first.")
         else:
             client = get_client()
-            with st.spinner("Generating..."):
-                generated = generate_prompt_via_llm(
-                    client=client,
-                    topic=gen_topic,
-                    tone=gen_tone,
-                    language=gen_lang,
-                    model=gen_model,
-                )
-            st.session_state["generated_prompt"] = generated
+            try:
+                with st.spinner("Generating..."):
+                    generated = generate_prompt_via_llm(
+                        client=client,
+                        topic=gen_topic,
+                        tone=gen_tone,
+                        language=gen_lang,
+                        model=gen_model,
+                    )
+                st.session_state["generated_prompt"] = generated
+            except Exception as exc:
+                st.error(f"Generation failed: {exc}")
 
     if "generated_prompt" in st.session_state:
         st.text_area("Generated prompt", value=st.session_state["generated_prompt"], height=100)

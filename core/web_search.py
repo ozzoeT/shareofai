@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +24,9 @@ from config import TAVILY_API_KEY, TAVILY_MONTHLY_LIMIT, TAVILY_USAGE_PATH
 # ---------------------------------------------------------------------------
 # Usage tracking
 # ---------------------------------------------------------------------------
+
+_usage_lock = threading.Lock()
+
 
 def _load_usage() -> dict:
     if TAVILY_USAGE_PATH.exists():
@@ -40,21 +44,23 @@ def _current_month() -> str:
 
 def get_usage() -> dict:
     """Returns current month usage: {'month': '2026-05', 'count': 42, 'limit': 1000}."""
-    data = _load_usage()
-    if data["month"] != _current_month():
-        data = {"month": _current_month(), "count": 0}
-        _save_usage(data)
+    with _usage_lock:
+        data = _load_usage()
+        if data["month"] != _current_month():
+            data = {"month": _current_month(), "count": 0}
+            _save_usage(data)
     data["limit"] = TAVILY_MONTHLY_LIMIT
     data["remaining"] = max(0, TAVILY_MONTHLY_LIMIT - data["count"])
     return data
 
 
 def _increment_usage() -> None:
-    data = _load_usage()
-    if data["month"] != _current_month():
-        data = {"month": _current_month(), "count": 0}
-    data["count"] += 1
-    _save_usage(data)
+    with _usage_lock:
+        data = _load_usage()
+        if data["month"] != _current_month():
+            data = {"month": _current_month(), "count": 0}
+        data["count"] += 1
+        _save_usage(data)
 
 
 # ---------------------------------------------------------------------------

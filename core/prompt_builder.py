@@ -43,9 +43,12 @@ _LANGUAGE_NAMES = {
 
 
 def load_prompts(path: Path = PROMPTS_PATH) -> list[dict]:
-    """Loads prompts from the JSON file."""
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    """Loads prompts from the JSON file. Returns [] if file is missing or malformed."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
 
 
 def save_prompts(prompts: list[dict], path: Path = PROMPTS_PATH) -> None:
