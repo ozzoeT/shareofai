@@ -228,7 +228,7 @@ def _run_single_with_search(
             schema_error=schema_err,
             latency_s=round(time.time() - t0, 3),
             usage=getattr(resp, "usage", None),
-            web_search_used=True,
+            web_search_used=bool(search_results),
             search_results=search_results,
         )
 
@@ -242,7 +242,7 @@ def _run_single_with_search(
             user_prompt=user_prompt,
             latency_s=round(time.time() - t0, 3),
             error=str(exc),
-            web_search_used=True,
+            web_search_used=bool(search_results),
             search_results=search_results,
         )
 
