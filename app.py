@@ -4,6 +4,8 @@ Interface for testing multiple LLMs in parallel on purchase recommendation queri
 """
 from __future__ import annotations
 
+import json
+
 import pandas as pd
 import streamlit as st
 
@@ -44,6 +46,40 @@ def get_client() -> ApolloClient:
 @st.cache_data
 def get_system_prompt() -> str:
     return SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
+
+
+def results_to_json(results: list[ModelResult]) -> str:
+    import dataclasses
+    rows = []
+    for r in results:
+        d = dataclasses.asdict(r)
+        d["timestamp"] = r.timestamp.isoformat()
+        d["usage"] = str(r.usage) if r.usage is not None else None
+        rows.append(d)
+    return json.dumps(rows, ensure_ascii=False, indent=2)
+
+
+def _download_buttons(results: list[ModelResult], df: pd.DataFrame, key_suffix: str) -> None:
+    ts = results[0].timestamp.strftime("%Y%m%d_%H%M%S") if results else "run"
+    col1, col2 = st.columns(2)
+    with col1:
+        st.download_button(
+            label="⬇️ Download CSV",
+            data=df.to_csv(index=False).encode("utf-8"),
+            file_name=f"shareofai_{ts}.csv",
+            mime="text/csv",
+            use_container_width=True,
+            key=f"dl_csv_{key_suffix}",
+        )
+    with col2:
+        st.download_button(
+            label="⬇️ Download JSON",
+            data=results_to_json(results).encode("utf-8"),
+            file_name=f"shareofai_{ts}.json",
+            mime="application/json",
+            use_container_width=True,
+            key=f"dl_json_{key_suffix}",
+        )
 
 
 def results_to_df(results: list[ModelResult]) -> pd.DataFrame:
@@ -207,6 +243,9 @@ with tab_run:
             )
             st.dataframe(brand_df, use_container_width=True)
 
+            st.subheader("💾 Save results")
+            _download_buttons(results, df, key_suffix="run")
+
             web_results = [r for r in results if r.web_search_used and r.search_results]
             if web_results:
                 st.subheader("🔍 Web sources consulted")
@@ -303,6 +342,12 @@ with tab_results:
         filtered_df = df[df["Model"].isin(model_filter)]
 
         st.dataframe(filtered_df, use_container_width=True)
+
+        _download_buttons(
+            [r for r in results if r.model in model_filter],
+            filtered_df,
+            key_suffix="results",
+        )
 
         ok_df = filtered_df[filtered_df["OK"] == "✅"]
 
