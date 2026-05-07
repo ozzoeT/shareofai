@@ -42,12 +42,20 @@ def _fix_newlines_in_strings(s: str) -> str:
     return "".join(result)
 
 
-def parse_json_response(raw: str) -> tuple[dict | None, str | None]:
+def parse_json_response(raw: str | None) -> tuple[dict | None, str | None]:
     """
     Attempts to parse a (potentially dirty) JSON string.
     Returns (dict, None) on success, (None, error message) otherwise.
     """
+    if not raw or not raw.strip():
+        return None, "empty response"
+
     cleaned = raw.strip()
+
+    # Strip markdown code fences that many models add (```json ... ``` or ``` ... ```)
+    md = re.match(r"^```(?:json)?\s*(.*?)\s*```$", cleaned, re.DOTALL)
+    if md:
+        cleaned = md.group(1)
 
     # Direct attempt
     try:

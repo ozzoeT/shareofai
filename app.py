@@ -108,7 +108,7 @@ def results_to_df(results: list[ModelResult]) -> pd.DataFrame:
             "Sources": len(r.search_results),
             "Latency (s)": r.latency_s,
             "OK": "✅" if r.success else "❌",
-            "Error": r.error or r.schema_error or "",
+            "Error": r.error or r.schema_error or r.json_parse_error or "",
         })
     return pd.DataFrame(rows)
 
@@ -431,7 +431,11 @@ with tab_results:
 
         if r.parsed_json:
             st.json(r.parsed_json)
-        elif r.error:
-            st.error(r.error)
         else:
-            st.code(r.raw_response or "")
+            if r.error:
+                st.error(f"**API error:** {r.error}")
+            if r.json_parse_error:
+                st.warning(f"**JSON parse error:** {r.json_parse_error}")
+            if r.schema_error:
+                st.warning(f"**Schema error:** {r.schema_error}")
+            st.code(r.raw_response or "(empty response)", language="json")
