@@ -151,17 +151,7 @@ def _run_single_with_search(
 
         # --- Tool calling loop ---
         while choice.finish_reason == "tool_calls":
-            tool_call = choice.message.tool_calls[0]
-            query = json.loads(tool_call.function.arguments).get("query", user_prompt)
-
-            results = search(query)
-            search_results.extend([
-                {"url": r.url, "title": r.title, "snippet": r.snippet}
-                for r in results
-            ])
-            context = build_search_context(results)
-
-            # Feed the tool result back — serialize assistant message to plain dict
+            # Serialize assistant message to plain dict
             # (Pydantic objects from the SDK are not accepted as message dicts by the gateway)
             messages.append({
                 "role": "assistant",
@@ -178,11 +168,21 @@ def _run_single_with_search(
                     for tc in choice.message.tool_calls
                 ],
             })
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call.id,
-                "content": context,
-            })
+
+            # GPT can return multiple parallel tool calls — each needs its own tool message.
+            for tool_call in choice.message.tool_calls:
+                query = json.loads(tool_call.function.arguments).get("query", user_prompt)
+                results = search(query)
+                search_results.extend([
+                    {"url": r.url, "title": r.title, "snippet": r.snippet}
+                    for r in results
+                ])
+                context = build_search_context(results)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": context,
+                })
 
             resp = client.chat(
                 messages=messages,

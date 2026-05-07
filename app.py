@@ -207,6 +207,18 @@ with tab_run:
             )
             st.dataframe(brand_df, use_container_width=True)
 
+            web_results = [r for r in results if r.web_search_used and r.search_results]
+            if web_results:
+                st.subheader("🔍 Web sources consulted")
+                for r in web_results:
+                    label = f"#{r.prompt_index} — {r.model} ({len(r.search_results)} sources)"
+                    with st.expander(label):
+                        for src in r.search_results:
+                            st.markdown(f"**[{src['title']}]({src['url']})**")
+                            snippet = src["snippet"]
+                            st.caption(snippet[:300] + "..." if len(snippet) > 300 else snippet)
+                            st.divider()
+
 
 # ---------------------------------------------------------------------------
 # Tab: Prompts
