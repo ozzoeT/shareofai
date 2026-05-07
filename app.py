@@ -48,6 +48,17 @@ def get_system_prompt() -> str:
     return SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
 
 
+def json_to_results(raw: str) -> list[ModelResult]:
+    from datetime import datetime as dt
+    rows = json.loads(raw)
+    results = []
+    for d in rows:
+        d["timestamp"] = dt.fromisoformat(d["timestamp"])
+        d.pop("usage", None)
+        results.append(ModelResult(**d))
+    return results
+
+
 def results_to_json(results: list[ModelResult]) -> str:
     import dataclasses
     rows = []
@@ -328,8 +339,21 @@ with tab_prompts:
 with tab_results:
     st.header("Last Run Results")
 
+    uploaded = st.file_uploader(
+        "Load results from a previous session (.json)",
+        type="json",
+        label_visibility="collapsed",
+    )
+    if uploaded is not None:
+        try:
+            loaded = json_to_results(uploaded.read().decode("utf-8"))
+            st.session_state["last_results"] = loaded
+            st.success(f"Loaded {len(loaded)} results from **{uploaded.name}**.")
+        except Exception as exc:
+            st.error(f"Could not parse file: {exc}")
+
     if "last_results" not in st.session_state:
-        st.info("Run a test first.")
+        st.info("Run a test first or load a previously saved JSON file.")
     else:
         results: list[ModelResult] = st.session_state["last_results"]
         df = results_to_df(results)
