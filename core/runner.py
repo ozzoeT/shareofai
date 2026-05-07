@@ -153,12 +153,20 @@ def _run_single_with_search(
         choice = resp.choices[0]
 
         # --- Tool calling loop ---
+        _MAX_TOOL_ITERATIONS = 5
+        _tool_iter = 0
         while choice.finish_reason == "tool_calls":
+            _tool_iter += 1
+            if _tool_iter > _MAX_TOOL_ITERATIONS:
+                raise RuntimeError(
+                    f"Tool-call loop exceeded {_MAX_TOOL_ITERATIONS} iterations — aborting."
+                )
             # Serialize assistant message to plain dict
             # (Pydantic objects from the SDK are not accepted as message dicts by the gateway)
+            # content is None when the model returns only tool_calls — use "" for gateway compat
             messages.append({
                 "role": "assistant",
-                "content": choice.message.content,
+                "content": choice.message.content or "",
                 "tool_calls": [
                     {
                         "id": tc.id,

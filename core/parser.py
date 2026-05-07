@@ -70,8 +70,8 @@ def parse_json_response(raw: str | None) -> tuple[dict | None, str | None]:
     except json.JSONDecodeError:
         pass
 
-    # Strip residual control characters
-    cleaned = re.sub(r"[\x00-\x1f\x7f](?=[^\"]*(?:\"[^\"]*\"[^\"]*)*$)", "", cleaned)
+    # Strip residual control characters (exclude \t \n \r — valid JSON whitespace)
+    cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f](?=[^\"]*(?:\"[^\"]*\"[^\"]*)*$)", "", cleaned)
     try:
         return json.loads(cleaned), None
     except json.JSONDecodeError as e:
