@@ -53,13 +53,14 @@ def get_system_prompt() -> str:
 
 
 def json_to_results(raw: str) -> list[ModelResult]:
+    import dataclasses
     from datetime import datetime as dt
+    valid_keys = {f.name for f in dataclasses.fields(ModelResult)}
     rows = json.loads(raw)
     results = []
     for d in rows:
         d["timestamp"] = dt.fromisoformat(d["timestamp"])
-        d.pop("usage", None)
-        results.append(ModelResult(**d))
+        results.append(ModelResult(**{k: v for k, v in d.items() if k in valid_keys}))
     return results
 
 

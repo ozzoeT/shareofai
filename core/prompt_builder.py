@@ -97,7 +97,10 @@ def generate_prompt_via_llm(
         temperature=temperature,
         max_tokens=300,
     )
-    return resp.choices[0].message.content.strip()
+    content = resp.choices[0].message.content
+    if not content:
+        raise ValueError("LLM returned empty content for prompt generation.")
+    return content.strip()
 
 
 def add_prompt(

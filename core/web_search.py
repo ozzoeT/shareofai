@@ -54,11 +54,17 @@ def get_usage() -> dict:
     return data
 
 
-def _increment_usage() -> None:
+def _check_and_increment_usage() -> None:
+    """Atomically checks the monthly limit and increments the counter."""
     with _usage_lock:
         data = _load_usage()
         if data["month"] != _current_month():
             data = {"month": _current_month(), "count": 0}
+        if data["count"] >= TAVILY_MONTHLY_LIMIT:
+            raise RuntimeError(
+                f"Tavily monthly limit reached ({TAVILY_MONTHLY_LIMIT} searches). "
+                "Upgrade plan or wait for next month."
+            )
         data["count"] += 1
         _save_usage(data)
 
@@ -107,16 +113,10 @@ WEB_SEARCH_TOOL = {
 
 def search(query: str, max_results: int = 5) -> list[SearchResult]:
     """Executes a Tavily search and returns structured results."""
-    usage = get_usage()
-    if usage["remaining"] == 0:
-        raise RuntimeError(
-            f"Tavily monthly limit reached ({TAVILY_MONTHLY_LIMIT} searches). "
-            "Upgrade plan or wait for next month."
-        )
+    _check_and_increment_usage()
 
     client = TavilyClient(api_key=TAVILY_API_KEY)
     response = client.search(query=query, max_results=max_results)
-    _increment_usage()
 
     return [
         SearchResult(
