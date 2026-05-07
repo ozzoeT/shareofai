@@ -66,12 +66,20 @@ def json_to_results(raw: str) -> list[ModelResult]:
 
 def results_to_json(results: list[ModelResult]) -> str:
     import dataclasses
+
+    class _Encoder(json.JSONEncoder):
+        def default(self, o):
+            try:
+                return vars(o)
+            except TypeError:
+                return str(o)
+
     rows = []
     for r in results:
         d = dataclasses.asdict(r)
         d["timestamp"] = r.timestamp.isoformat()
         rows.append(d)
-    return json.dumps(rows, ensure_ascii=False, indent=2)
+    return json.dumps(rows, cls=_Encoder, ensure_ascii=False, indent=2)
 
 
 def _download_buttons(results: list[ModelResult], df: pd.DataFrame, key_suffix: str) -> None:
