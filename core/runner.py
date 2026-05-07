@@ -78,7 +78,10 @@ def _run_single(
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        content = resp.choices[0].message.content
+        choice = resp.choices[0]
+        content = choice.message.content
+        if not content:
+            raise ValueError(f"Empty response (finish_reason={choice.finish_reason!r})")
         parsed, parse_err = parse_json_response(content)
         schema_ok, schema_err = False, None
         if parsed is not None and isinstance(parsed, dict):
@@ -195,6 +198,9 @@ def _run_single_with_search(
 
         # --- Final answer ---
         content = choice.message.content
+        finish_reason = choice.finish_reason
+        if not content:
+            raise ValueError(f"Empty response (finish_reason={finish_reason!r})")
         parsed, parse_err = parse_json_response(content)
         schema_ok, schema_err = False, None
         if parsed is not None and isinstance(parsed, dict):
