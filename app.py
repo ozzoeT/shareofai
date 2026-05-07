@@ -346,6 +346,91 @@ with tab_prompts:
             del st.session_state["generated_prompt"]
             st.rerun()
 
+    st.divider()
+    st.subheader("Generate a batch of prompts")
+
+    col_b1, col_b2, col_b3, col_b4 = st.columns(4)
+    with col_b1:
+        batch_topic = st.text_input(
+            "Topic",
+            placeholder="e.g. flea prevention for a puppy",
+            key="batch_topic",
+        )
+    with col_b2:
+        batch_tones = st.multiselect("Tones", AVAILABLE_TONES, default=AVAILABLE_TONES[:2], key="batch_tones")
+    with col_b3:
+        batch_langs = st.multiselect("Languages", AVAILABLE_LANGUAGES, default=AVAILABLE_LANGUAGES[:2], key="batch_langs")
+    with col_b4:
+        batch_n = st.number_input("How many", min_value=1, max_value=50, value=5, key="batch_n")
+
+    batch_model = st.selectbox(
+        "Generator model",
+        options=selected_models if selected_models else AVAILABLE_MODELS[:1],
+        key="batch_gen_model",
+    )
+
+    if st.button("✨ Generate batch"):
+        if not batch_topic.strip():
+            st.warning("Enter a topic first.")
+        elif not batch_tones:
+            st.warning("Select at least one tone.")
+        elif not batch_langs:
+            st.warning("Select at least one language.")
+        else:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            import itertools
+
+            client = get_client()
+            combinations = list(itertools.cycle(
+                [(t, l) for t in batch_tones for l in batch_langs]
+            ))[:batch_n]
+
+            def _gen(tone, lang):
+                return generate_prompt_via_llm(
+                    client=client,
+                    topic=batch_topic,
+                    tone=tone,
+                    language=lang,
+                    model=batch_model,
+                ), tone, lang
+
+            generated_batch = []
+            errors = []
+            with st.spinner(f"Generating {batch_n} prompts in parallel…"):
+                with ThreadPoolExecutor(max_workers=min(batch_n, 8)) as ex:
+                    futures = [ex.submit(_gen, tone, lang) for tone, lang in combinations]
+                    for f in as_completed(futures):
+                        try:
+                            text, tone, lang = f.result()
+                            generated_batch.append({"prompt": text, "tone": tone, "language": lang})
+                        except Exception as exc:
+                            errors.append(str(exc))
+
+            if errors:
+                st.warning(f"{len(errors)} generation(s) failed: {errors[0]}")
+            if generated_batch:
+                st.session_state["generated_batch"] = generated_batch
+                st.success(f"Generated {len(generated_batch)} prompts — review and save below.")
+
+    if "generated_batch" in st.session_state:
+        batch = st.session_state["generated_batch"]
+        st.markdown(f"**{len(batch)} prompts ready to save:**")
+        for i, p in enumerate(batch):
+            st.markdown(f"`[{p['tone']} / {p['language']}]` {p['prompt']}")
+        col_save, col_discard = st.columns(2)
+        with col_save:
+            if st.button("💾 Save all to library", use_container_width=True):
+                for p in batch:
+                    prompts = add_prompt(prompts, p["prompt"], p["tone"], p["language"])
+                save_prompts(prompts)
+                st.success(f"{len(batch)} prompts saved!")
+                del st.session_state["generated_batch"]
+                st.rerun()
+        with col_discard:
+            if st.button("🗑️ Discard", use_container_width=True):
+                del st.session_state["generated_batch"]
+                st.rerun()
+
 
 # ---------------------------------------------------------------------------
 # Tab: Results
