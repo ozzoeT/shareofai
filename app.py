@@ -70,7 +70,6 @@ def results_to_json(results: list[ModelResult]) -> str:
     for r in results:
         d = dataclasses.asdict(r)
         d["timestamp"] = r.timestamp.isoformat()
-        d["usage"] = str(r.usage) if r.usage is not None else None
         rows.append(d)
     return json.dumps(rows, ensure_ascii=False, indent=2)
 
