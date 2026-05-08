@@ -33,6 +33,38 @@ st.set_page_config(
     layout="wide",
 )
 
+st.markdown("""
+<style>
+/* Metric value */
+[data-testid="stMetricValue"] { color: #00E47C; }
+
+/* Dataframe header */
+[data-testid="stDataFrameResizable"] thead tr th {
+    background-color: #0D3D2E;
+    color: #00E47C;
+}
+
+/* Expander header */
+[data-testid="stExpander"] summary {
+    color: #00E47C;
+}
+
+/* Sidebar title */
+[data-testid="stSidebarContent"] h2 {
+    color: #00E47C;
+}
+
+/* Success/info banner accent */
+[data-testid="stAlert"] { border-left-color: #00E47C; }
+
+/* Tab active underline */
+[data-baseweb="tab"][aria-selected="true"] {
+    border-bottom-color: #00E47C !important;
+    color: #00E47C !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
