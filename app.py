@@ -13,6 +13,7 @@ from config import (
     AVAILABLE_MODELS,
     AVAILABLE_TONES,
     AVAILABLE_LANGUAGES,
+    AVAILABLE_CATEGORIES,
     DEFAULT_MODELS,
     DEFAULT_TEMPERATURE,
     DEFAULT_MAX_TOKENS,
@@ -23,6 +24,7 @@ from config import (
 from core.client import ApolloClient
 from core.prompt_builder import load_prompts, save_prompts, generate_prompt_via_llm, add_prompt
 from core.runner import run_parallel, ModelResult
+from core.brand_groups import load_brand_groups, save_brand_groups, normalize_brands_in_df
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -137,11 +139,12 @@ def _download_buttons(results: list[ModelResult], df: pd.DataFrame, key_suffix: 
         )
 
 
-def results_to_df(results: list[ModelResult]) -> pd.DataFrame:
+def results_to_df(results: list[ModelResult], brand_groups: list[dict] | None = None) -> pd.DataFrame:
     rows = []
     for r in results:
         rows.append({
             "Prompt #": r.prompt_index,
+            "Category": r.category or "",
             "Tone": r.tone or "",
             "Language": r.language or "",
             "Model": r.model,
@@ -154,7 +157,10 @@ def results_to_df(results: list[ModelResult]) -> pd.DataFrame:
             "OK": "✅" if r.success else "❌",
             "Error": r.error or r.schema_error or r.json_parse_error or "",
         })
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    if brand_groups:
+        normalize_brands_in_df(df, brand_groups)
+    return df
 
 
 def _tavily_usage_widget() -> None:
@@ -216,7 +222,9 @@ product purchase advice. Analyse which brands are preferred, with what confidenc
 """
 )
 
-tab_run, tab_prompts, tab_results = st.tabs(["▶️ Run Test", "📝 Prompts", "📊 Results"])
+tab_run, tab_prompts, tab_results, tab_brands = st.tabs(["▶️ Run Test", "📝 Prompts", "📊 Results", "🏷️ Brand Groups"])
+
+brand_groups = load_brand_groups()
 
 
 # ---------------------------------------------------------------------------
@@ -239,6 +247,10 @@ with tab_run:
         filter_lang = st.multiselect(
             "Filter by language", options=AVAILABLE_LANGUAGES, default=[]
         )
+        all_categories = sorted({p.get("category", "") for p in prompts if p.get("category")})
+        filter_cat = st.multiselect(
+            "Filter by category", options=all_categories, default=[]
+        )
 
     with col2:
         st.metric("Total prompts", len(prompts))
@@ -247,7 +259,8 @@ with tab_run:
             "Total calls",
             len([p for p in prompts
                  if (not filter_tone or p.get("tone") in filter_tone)
-                 and (not filter_lang or p.get("language") in filter_lang)])
+                 and (not filter_lang or p.get("language") in filter_lang)
+                 and (not filter_cat or p.get("category") in filter_cat)])
             * len(selected_models),
         )
 
@@ -255,11 +268,14 @@ with tab_run:
         p for p in prompts
         if (not filter_tone or p.get("tone") in filter_tone)
         and (not filter_lang or p.get("language") in filter_lang)
+        and (not filter_cat or p.get("category") in filter_cat)
     ]
 
     with st.expander(f"Preview prompts ({len(filtered)} selected)"):
         for i, p in enumerate(filtered):
-            st.markdown(f"**{i}** `[{p.get('tone','?')} / {p.get('language','?')}]` {p['prompt']}")
+            cat = p.get("category", "")
+            cat_label = f" / {cat}" if cat else ""
+            st.markdown(f"**{i}** `[{p.get('tone','?')} / {p.get('language','?')}{cat_label}]` {p['prompt']}")
 
     if not selected_models:
         st.warning("Select at least one model in the sidebar.")
@@ -285,7 +301,7 @@ with tab_run:
             st.session_state["last_results"] = results
             st.success(f"Done! {len(results)} results collected.")
 
-            df = results_to_df(results)
+            df = results_to_df(results, brand_groups)
             st.dataframe(df, use_container_width=True)
 
             st.subheader("Brand preference summary")
@@ -329,7 +345,7 @@ with tab_prompts:
     st.divider()
     st.subheader("Generate a new prompt")
 
-    col_gen1, col_gen2, col_gen3 = st.columns(3)
+    col_gen1, col_gen2, col_gen3, col_gen4 = st.columns(4)
     with col_gen1:
         gen_topic = st.text_input(
             "Topic",
@@ -339,6 +355,8 @@ with tab_prompts:
         gen_tone = st.selectbox("Tone", AVAILABLE_TONES)
     with col_gen3:
         gen_lang = st.selectbox("Language", AVAILABLE_LANGUAGES)
+    with col_gen4:
+        gen_cat = st.selectbox("Category", ["(none)"] + AVAILABLE_CATEGORIES)
 
     gen_model = st.selectbox(
         "Generator model",
@@ -372,6 +390,7 @@ with tab_prompts:
                 st.session_state["generated_prompt"],
                 gen_tone,
                 gen_lang,
+                category=gen_cat if gen_cat != "(none)" else None,
             )
             save_prompts(prompts)
             st.success("Prompt saved!")
@@ -381,7 +400,7 @@ with tab_prompts:
     st.divider()
     st.subheader("Generate a batch of prompts")
 
-    col_b1, col_b2, col_b3, col_b4 = st.columns(4)
+    col_b1, col_b2, col_b3, col_b4, col_b5 = st.columns(5)
     with col_b1:
         batch_topic = st.text_input(
             "Topic",
@@ -393,6 +412,8 @@ with tab_prompts:
     with col_b3:
         batch_langs = st.multiselect("Languages", AVAILABLE_LANGUAGES, default=AVAILABLE_LANGUAGES[:2], key="batch_langs")
     with col_b4:
+        batch_cat = st.selectbox("Category", ["(none)"] + AVAILABLE_CATEGORIES, key="batch_cat")
+    with col_b5:
         batch_n = st.number_input("How many", min_value=1, max_value=50, value=5, key="batch_n")
 
     batch_model = st.selectbox(
@@ -441,6 +462,10 @@ with tab_prompts:
             if errors:
                 st.warning(f"{len(errors)} generation(s) failed: {errors[0]}")
             if generated_batch:
+                _batch_cat_val = batch_cat if batch_cat != "(none)" else None
+                for item in generated_batch:
+                    if _batch_cat_val:
+                        item["category"] = _batch_cat_val
                 st.session_state["generated_batch"] = generated_batch
                 st.success(f"Generated {len(generated_batch)} prompts — review and save below.")
 
@@ -448,12 +473,13 @@ with tab_prompts:
         batch = st.session_state["generated_batch"]
         st.markdown(f"**{len(batch)} prompts ready to save:**")
         for i, p in enumerate(batch):
-            st.markdown(f"`[{p['tone']} / {p['language']}]` {p['prompt']}")
+            cat_label = f" / {p['category']}" if p.get("category") else ""
+            st.markdown(f"`[{p['tone']} / {p['language']}{cat_label}]` {p['prompt']}")
         col_save, col_discard = st.columns(2)
         with col_save:
             if st.button("💾 Save all to library", use_container_width=True):
                 for p in batch:
-                    prompts = add_prompt(prompts, p["prompt"], p["tone"], p["language"])
+                    prompts = add_prompt(prompts, p["prompt"], p["tone"], p["language"], p.get("category"))
                 save_prompts(prompts)
                 st.success(f"{len(batch)} prompts saved!")
                 del st.session_state["generated_batch"]
@@ -488,7 +514,7 @@ with tab_results:
         st.info("Run a test first or load a previously saved JSON file.")
     else:
         results: list[ModelResult] = st.session_state["last_results"]
-        df = results_to_df(results)
+        df = results_to_df(results, brand_groups)
 
         model_filter = st.multiselect(
             "Filter by model",
@@ -517,6 +543,70 @@ with tab_results:
             st.bar_chart(mentions)
         else:
             st.info("No successful results to chart.")
+
+        # --- Comparison by prompt category ---
+        categories_present = sorted(ok_df["Category"].dropna().unique()) if not ok_df.empty else []
+        categories_present = [c for c in categories_present if c]
+        if categories_present:
+            st.subheader("Brand preference by category")
+            cat_filter = st.multiselect(
+                "Select categories to compare",
+                options=categories_present,
+                default=categories_present,
+                key="cat_filter_results",
+            )
+            cat_df = ok_df[ok_df["Category"].isin(cat_filter)]
+            if not cat_df.empty:
+                for cat in cat_filter:
+                    sub = cat_df[cat_df["Category"] == cat]
+                    if sub.empty:
+                        continue
+                    with st.expander(f"Category: **{cat}** ({len(sub)} results)", expanded=True):
+                        pivot = (
+                            sub.groupby(["Preferred Brand", "Model"])
+                            .size()
+                            .unstack(fill_value=0)
+                        )
+                        st.bar_chart(pivot)
+                        summary = (
+                            sub.groupby(["Model", "Preferred Brand"])
+                            .size()
+                            .reset_index(name="Count")
+                            .sort_values(["Model", "Count"], ascending=[True, False])
+                        )
+                        st.dataframe(summary, use_container_width=True, hide_index=True)
+
+        # --- Comparison by tone ---
+        tones_present = sorted(ok_df["Tone"].dropna().unique()) if not ok_df.empty else []
+        tones_present = [t for t in tones_present if t]
+        if tones_present:
+            st.subheader("Brand preference by tone")
+            tone_filter = st.multiselect(
+                "Select tones to compare",
+                options=tones_present,
+                default=tones_present,
+                key="tone_filter_results",
+            )
+            tone_df = ok_df[ok_df["Tone"].isin(tone_filter)]
+            if not tone_df.empty:
+                for tone in tone_filter:
+                    sub = tone_df[tone_df["Tone"] == tone]
+                    if sub.empty:
+                        continue
+                    with st.expander(f"Tone: **{tone}** ({len(sub)} results)", expanded=True):
+                        pivot = (
+                            sub.groupby(["Preferred Brand", "Model"])
+                            .size()
+                            .unstack(fill_value=0)
+                        )
+                        st.bar_chart(pivot)
+                        summary = (
+                            sub.groupby(["Model", "Preferred Brand"])
+                            .size()
+                            .reset_index(name="Count")
+                            .sort_values(["Model", "Count"], ascending=[True, False])
+                        )
+                        st.dataframe(summary, use_container_width=True, hide_index=True)
 
         st.subheader("Average confidence by model")
         if not ok_df.empty:
@@ -571,3 +661,60 @@ with tab_results:
             if r.schema_error:
                 st.warning(f"**Schema error:** {r.schema_error}")
             st.code(r.raw_response or "(empty response)", language="json")
+
+
+# ---------------------------------------------------------------------------
+# Tab: Brand Groups
+# ---------------------------------------------------------------------------
+
+with tab_brands:
+    st.header("Brand Groups")
+    st.markdown(
+        "Define canonical brand names and their aliases. "
+        "When results are displayed, any alias is automatically replaced by its canonical name."
+    )
+
+    # Reload so edits from this session are reflected
+    brand_groups_edit = load_brand_groups()
+
+    if brand_groups_edit:
+        st.subheader("Current groups")
+        for idx, group in enumerate(brand_groups_edit):
+            col_a, col_b, col_c = st.columns([2, 4, 1])
+            with col_a:
+                st.markdown(f"**{group['canonical']}**")
+            with col_b:
+                st.caption(", ".join(group.get("aliases", [])) or "_(no aliases)_")
+            with col_c:
+                if st.button("🗑️", key=f"del_group_{idx}", help="Delete this group"):
+                    brand_groups_edit.pop(idx)
+                    save_brand_groups(brand_groups_edit)
+                    st.rerun()
+    else:
+        st.info("No brand groups defined yet.")
+
+    st.divider()
+    st.subheader("Add a new group")
+    col_cano, col_alias = st.columns([2, 4])
+    with col_cano:
+        new_canonical = st.text_input("Canonical name", placeholder="e.g. NexGard")
+    with col_alias:
+        new_aliases_raw = st.text_input(
+            "Aliases (comma-separated)",
+            placeholder="e.g. Nexgard, NEXGARD, nexgard spectra",
+        )
+
+    if st.button("➕ Add group", type="primary"):
+        if not new_canonical.strip():
+            st.warning("Enter a canonical name.")
+        else:
+            aliases = [a.strip() for a in new_aliases_raw.split(",") if a.strip()]
+            # Avoid duplicates: check if canonical already exists
+            existing_canonicals = [g["canonical"].lower() for g in brand_groups_edit]
+            if new_canonical.strip().lower() in existing_canonicals:
+                st.warning(f"A group for **{new_canonical.strip()}** already exists. Delete it first.")
+            else:
+                brand_groups_edit.append({"canonical": new_canonical.strip(), "aliases": aliases})
+                save_brand_groups(brand_groups_edit)
+                st.success(f"Group **{new_canonical.strip()}** saved with {len(aliases)} alias(es).")
+                st.rerun()

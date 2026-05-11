@@ -16,6 +16,7 @@ BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
 SYSTEM_PROMPT_PATH = DATA_DIR / "system_prompt.txt"
 PROMPTS_PATH = DATA_DIR / "prompts.json"
+BRAND_GROUPS_PATH = DATA_DIR / "brand_groups.json"
 
 # --- Apollo / LLM Gateway ---
 APOLLO_CLIENT_ID = os.getenv("APOLLO_CLIENT_ID", "")
@@ -51,6 +52,7 @@ DEFAULT_MAX_TOKENS: int = 2000
 # --- Available tones for prompt generation ---
 AVAILABLE_TONES: list[str] = ["concise", "detailed", "reassuring", "technical", "emotional"]
 AVAILABLE_LANGUAGES: list[str] = ["ita", "eng", "deu", "fra", "esp"]
+AVAILABLE_CATEGORIES: list[str] = ["dogs", "cats", "puppies", "senior pets", "general"]
 
 # --- Web search (Tavily + tool calling) ---
 WEB_SEARCH_ENABLED: bool = True

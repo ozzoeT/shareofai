@@ -23,6 +23,7 @@ class ModelResult:
     tone: str | None
     language: str | None
     user_prompt: str
+    category: str | None = None
     raw_response: str | None = None
     parsed_json: dict | None = None
     json_parse_error: str | None = None
@@ -64,6 +65,7 @@ def _run_single(
     prompt_index: int | None,
     tone: str | None,
     language: str | None,
+    category: str | None,
     temperature: float,
     max_tokens: int,
 ) -> ModelResult:
@@ -93,6 +95,7 @@ def _run_single(
             prompt_index=prompt_index,
             tone=tone,
             language=language,
+            category=category,
             user_prompt=user_prompt,
             raw_response=content,
             parsed_json=parsed,
@@ -109,6 +112,7 @@ def _run_single(
             prompt_index=prompt_index,
             tone=tone,
             language=language,
+            category=category,
             user_prompt=user_prompt,
             latency_s=round(time.time() - t0, 3),
             error=str(exc),
@@ -127,6 +131,7 @@ def _run_single_with_search(
     prompt_index: int | None,
     tone: str | None,
     language: str | None,
+    category: str | None,
     temperature: float,
     max_tokens: int,
 ) -> ModelResult:
@@ -220,6 +225,7 @@ def _run_single_with_search(
             prompt_index=prompt_index,
             tone=tone,
             language=language,
+            category=category,
             user_prompt=user_prompt,
             raw_response=content,
             parsed_json=parsed,
@@ -239,6 +245,7 @@ def _run_single_with_search(
             prompt_index=prompt_index,
             tone=tone,
             language=language,
+            category=category,
             user_prompt=user_prompt,
             latency_s=round(time.time() - t0, 3),
             error=str(exc),
@@ -292,6 +299,7 @@ def run_parallel(
                 i,
                 item.get("tone"),
                 item.get("language"),
+                item.get("category"),
                 temperature,
                 max_tokens,
             ): (i, model)

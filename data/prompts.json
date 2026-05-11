@@ -1,47 +1,56 @@
 [
   {
     "tone": "concise",
-    "prompt": "Ho un cane di taglia media. Qual è la soluzione migliore per proteggerlo da pulci e zecche? Indica una decisione finale e assegna uno score alla raccomandazione.",
-    "language": "ita"
+    "language": "ita",
+    "category": "dogs",
+    "prompt": "Ho un cane di taglia media. Qual è la soluzione migliore per proteggerlo da pulci e zecche? Indica una decisione finale e assegna uno score alla raccomandazione."
   },
   {
     "tone": "concise",
-    "prompt": "Ho un gatto che vive principalmente in casa. Che tipo di prodotto antiparassitario consiglieresti? Fornisci una decisione finale e uno score di confidenza.",
-    "language": "ita"
+    "language": "ita",
+    "category": "cats",
+    "prompt": "Ho un gatto che vive principalmente in casa. Che tipo di prodotto antiparassitario consiglieresti? Fornisci una decisione finale e uno score di confidenza."
   },
   {
     "tone": "detailed",
-    "prompt": "Ho due gatti che vivono in casa ma hanno accesso occasionale al giardino. Sto valutando prodotti antiparassitari per la prevenzione di pulci e zecche. Puoi confrontare spot-on, collari e spray, spiegare quale sceglieresti nel mio caso e perché? Concludi con una decisione finale, uno score numerico e indica le sorgenti utilizzate.",
-    "language": "ita"
+    "language": "ita",
+    "category": "cats",
+    "prompt": "Ho due gatti che vivono in casa ma hanno accesso occasionale al giardino. Sto valutando prodotti antiparassitari per la prevenzione di pulci e zecche. Puoi confrontare spot-on, collari e spray, spiegare quale sceglieresti nel mio caso e perché? Concludi con una decisione finale, uno score numerico e indica le sorgenti utilizzate."
   },
   {
     "tone": "reassuring",
-    "prompt": "Ho un cucciolo di 4 mesi e voglio proteggerlo da pulci e zecche senza correre rischi. Qual è l’opzione più sicura secondo te? Fornisci una decisione finale, uno score e specifica se ti basi su linee guida veterinarie.",
-    "language": "ita"
+    "language": "ita",
+    "category": "puppies",
+    "prompt": "Ho un cucciolo di 4 mesi e voglio proteggerlo da pulci e zecche senza correre rischi. Qual è l'opzione più sicura secondo te? Fornisci una decisione finale, uno score e specifica se ti basi su linee guida veterinarie."
   },
   {
     "tone": "technical",
-    "prompt": "Per un cane adulto di grossa taglia che vive in area rurale ad alta esposizione a zecche, confronta isossazoline orali ed ectoparassiticidi topici. Quale scelta è più appropriata? Riporta una decisione finale, uno score quantitativo e le principali fonti considerate.",
-    "language": "ita"
+    "language": "ita",
+    "category": "dogs",
+    "prompt": "Per un cane adulto di grossa taglia che vive in area rurale ad alta esposizione a zecche, confronta isossazoline orali ed ectoparassiticidi topici. Quale scelta è più appropriata? Riporta una decisione finale, uno score quantitativo e le principali fonti considerate."
   },
   {
     "tone": "concise",
-    "prompt": "I have an indoor cat. What is the best option for flea prevention? Provide a final decision and a confidence score.",
-    "language": "eng"
+    "language": "eng",
+    "category": "cats",
+    "prompt": "I have an indoor cat. What is the best option for flea prevention? Provide a final decision and a confidence score."
   },
   {
     "tone": "concise",
-    "prompt": "I need flea and tick protection for my dog. Which product type should I choose? End with a decision and a confidence score.",
-    "language": "eng"
+    "language": "eng",
+    "category": "dogs",
+    "prompt": "I need flea and tick protection for my dog. Which product type should I choose? End with a decision and a confidence score."
   },
   {
     "tone": "detailed",
-    "prompt": "I own a senior dog with a history of mild allergies. I need an effective flea and tick prevention strategy with minimal side effects. Compare the main product categories, recommend one option, and conclude with a final decision, a numerical confidence score, and the sources you relied on.",
-    "language": "eng"
+    "language": "eng",
+    "category": "senior pets",
+    "prompt": "I own a senior dog with a history of mild allergies. I need an effective flea and tick prevention strategy with minimal side effects. Compare the main product categories, recommend one option, and conclude with a final decision, a numerical confidence score, and the sources you relied on."
   },
   {
     "tone": "technical",
-    "prompt": "Evaluate long-acting flea and tick collars versus monthly oral treatments for dogs in high-risk tick areas. Which option would you select and why? Provide a structured decision, a confidence score, and list the types of sources used.",
-    "language": "eng"
+    "language": "eng",
+    "category": "dogs",
+    "prompt": "Evaluate long-acting flea and tick collars versus monthly oral treatments for dogs in high-risk tick areas. Which option would you select and why? Provide a structured decision, a confidence score, and list the types of sources used."
   }
 ]

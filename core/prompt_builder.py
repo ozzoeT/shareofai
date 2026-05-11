@@ -108,7 +108,11 @@ def add_prompt(
     prompt_text: str,
     tone: str,
     language: str,
+    category: str | None = None,
 ) -> list[dict]:
     """Adds a new prompt to the list (without saving to disk)."""
-    prompts.append({"tone": tone, "language": language, "prompt": prompt_text})
+    entry: dict = {"tone": tone, "language": language, "prompt": prompt_text}
+    if category:
+        entry["category"] = category
+    prompts.append(entry)
     return prompts
