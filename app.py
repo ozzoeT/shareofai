@@ -244,7 +244,7 @@ product purchase advice. Analyse which brands are preferred, with what confidenc
 """
 )
 
-tab_run, tab_prompts, tab_results, tab_brands = st.tabs(["▶️ Run Test", "📝 Prompts", "📊 Results", "🏷️ Brand Groups"])
+tab_run, tab_prompts, tab_results, tab_brands, tab_content = st.tabs(["▶️ Run Test", "📝 Prompts", "📊 Results", "🏷️ Brand Groups", "🔬 Content Analysis"])
 
 brand_groups = load_brand_groups()
 
@@ -721,3 +721,170 @@ with tab_brands:
                 save_brand_groups(brand_groups_edit)
                 st.success(f"Group **{new_canonical.strip()}** saved with {len(aliases)} alias(es).")
                 st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# Tab: Content Analysis
+# ---------------------------------------------------------------------------
+
+with tab_content:
+    st.header("Content Analysis")
+    st.markdown(
+        "Analyze the web snippets read by the AI before recommending each brand. "
+        "Understand what content characteristics drive brand recommendations."
+    )
+
+    if "last_results" not in st.session_state:
+        st.info("Run a test with web search enabled first, or load a JSON file in the Results tab.")
+    else:
+        _all_results: list[ModelResult] = st.session_state["last_results"]
+        _web_ok = [r for r in _all_results if r.web_search_used and r.search_results and r.success]
+
+        if not _web_ok:
+            st.warning("No successful results with web search data found. Run tests with web search enabled.")
+        else:
+            from collections import defaultdict
+
+            # Group snippets by preferred_brand
+            _brand_snippets: dict[str, list[dict]] = defaultdict(list)
+            for _r in _web_ok:
+                for _src in _r.search_results:
+                    _brand_snippets[_r.preferred_brand].append({
+                        "snippet": _src["snippet"],
+                        "url": _src["url"],
+                        "title": _src["title"],
+                        "prompt": _r.user_prompt,
+                        "model": _r.model,
+                        "ai_rationale": (_r.parsed_json or {}).get("confidence_rationale", ""),
+                    })
+
+            _brands_available = sorted(_brand_snippets.keys())
+
+            col_s1, col_s2, col_s3 = st.columns(3)
+            with col_s1:
+                st.metric("Brands with web data", len(_brands_available))
+            with col_s2:
+                st.metric("Results with web search", len(_web_ok))
+            with col_s3:
+                st.metric("Total snippets", sum(len(v) for v in _brand_snippets.values()))
+
+            _brands_to_compare = st.multiselect(
+                "Select brands to compare",
+                options=_brands_available,
+                default=_brands_available[:min(3, len(_brands_available))],
+                key="content_brands",
+            )
+
+            if not _brands_to_compare:
+                st.warning("Select at least one brand.")
+            else:
+                # Per-brand snippet preview
+                for _brand in _brands_to_compare:
+                    _snippets = _brand_snippets[_brand]
+                    _brand_lower = _brand.lower()
+                    _n_mention = sum(1 for s in _snippets if _brand_lower in s["snippet"].lower())
+                    _mention_pct = _n_mention / len(_snippets) * 100 if _snippets else 0
+
+                    with st.expander(
+                        f"**{_brand}** — {len(_snippets)} snippets | brand cited in {_mention_pct:.0f}% of snippets"
+                    ):
+                        if _mention_pct > 70:
+                            st.success(
+                                f"Brand name found in {_mention_pct:.0f}% of snippets "
+                                "→ recommendation likely driven by web content"
+                            )
+                        elif _mention_pct > 30:
+                            st.warning(
+                                f"Brand name found in {_mention_pct:.0f}% of snippets "
+                                "→ mixed signal: web content + prior knowledge"
+                            )
+                        else:
+                            st.error(
+                                f"Brand name found in only {_mention_pct:.0f}% of snippets "
+                                "→ recommendation from prior knowledge, not web content"
+                            )
+
+                        for _i, _s in enumerate(_snippets[:8]):
+                            st.markdown(f"**[{_s['title']}]({_s['url']})**")
+                            st.caption(
+                                f"Prompt: _{_s['prompt'][:80]}…_ | Model: `{_s['model']}`"
+                            )
+                            st.markdown(_s["snippet"])
+                            if _i < min(7, len(_snippets) - 1):
+                                st.divider()
+
+                # LLM comparative analysis
+                st.subheader("LLM Comparative Analysis")
+
+                _analysis_model = st.selectbox(
+                    "Analysis model",
+                    options=AVAILABLE_MODELS,
+                    index=AVAILABLE_MODELS.index("claude_4_6_sonnet") if "claude_4_6_sonnet" in AVAILABLE_MODELS else 0,
+                    key="content_analysis_model",
+                )
+                _max_snippets = st.slider(
+                    "Max snippets per brand",
+                    min_value=5,
+                    max_value=30,
+                    value=15,
+                    help="More snippets = richer analysis but higher token usage",
+                )
+
+                _include_rationale = st.toggle(
+                    "Include AI rationale alongside snippets",
+                    value=False,
+                    help="Adds the model's confidence_rationale next to each snippet — shows what the AI extracted, not just what it read",
+                )
+
+                if st.button("🔍 Run analysis", type="primary", key="run_content_analysis"):
+                    _sections = []
+                    for _brand in _brands_to_compare:
+                        _sample = _brand_snippets[_brand][:_max_snippets]
+                        _parts = []
+                        for _s in _sample:
+                            _entry = f"[Source: {_s['title']}]\n{_s['snippet']}"
+                            if _include_rationale and _s.get("ai_rationale"):
+                                _entry += f"\n[AI rationale after reading: {_s['ai_rationale']}]"
+                            _parts.append(_entry)
+                        _joined = "\n---\n".join(_parts)
+                        _sections.append(
+                            f"### Brand: {_brand} ({len(_sample)} snippets)\n{_joined}"
+                        )
+
+                    _analysis_prompt = (
+                        "You are analyzing web content snippets that an AI read before recommending "
+                        "specific veterinary product brands. The snippets below are grouped by the brand "
+                        "the AI ultimately recommended after reading them.\n\n"
+                        + "\n\n".join(_sections)
+                        + "\n\nAnalyze and compare across brands:\n"
+                        "1. **Content characteristics**: What language, claims, or signals are typical for each brand's snippets?\n"
+                        "2. **Authority signals**: Which brand's content uses more clinical references, studies, or expert endorsements?\n"
+                        "3. **Recommendation clarity**: Which brand's snippets contain clearer, more direct recommendations that an AI can extract?\n"
+                        "4. **AI-friendliness**: Which brand's content is better structured for AI consumption "
+                        "(specific product names, direct claims, explicit conclusions)?\n"
+                        "5. **Gaps**: What is missing in the underperforming brand's content that the leading brand has?\n\n"
+                        "Be specific and cite examples from the snippets. "
+                        "Structure: one section per brand, then a comparative summary with actionable suggestions."
+                    )
+
+                    with st.spinner("Analyzing…"):
+                        try:
+                            _resp = get_client().chat(
+                                messages=[{"role": "user", "content": _analysis_prompt}],
+                                model=_analysis_model,
+                                temperature=0.3,
+                                max_tokens=2000,
+                            )
+                            st.session_state["content_analysis"] = _resp.choices[0].message.content
+                        except Exception as _exc:
+                            st.error(f"Analysis failed: {_exc}")
+
+                if "content_analysis" in st.session_state:
+                    st.markdown(st.session_state["content_analysis"])
+                    st.download_button(
+                        "⬇️ Download analysis",
+                        data=st.session_state["content_analysis"].encode("utf-8"),
+                        file_name="content_analysis.md",
+                        mime="text/markdown",
+                        key="dl_content_analysis",
+                    )
