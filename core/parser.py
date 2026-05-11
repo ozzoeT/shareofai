@@ -55,7 +55,10 @@ def parse_json_response(raw: str | None) -> tuple[dict | None, str | None]:
     # Strip markdown code fences that many models add (```json ... ``` or ``` ... ```)
     md = re.match(r"^```(?:json)?\s*(.*?)\s*```$", cleaned, re.DOTALL)
     if md:
-        cleaned = md.group(1)
+        cleaned = md.group(1).strip()
+
+    if not cleaned:
+        return None, "empty response after stripping markdown fences"
 
     # Direct attempt
     try:
@@ -64,20 +67,31 @@ def parse_json_response(raw: str | None) -> tuple[dict | None, str | None]:
         pass
 
     # Fix literal newlines inside strings
-    cleaned = _fix_newlines_in_strings(cleaned)
+    fixed = _fix_newlines_in_strings(cleaned)
     try:
-        return json.loads(cleaned), None
+        return json.loads(fixed), None
     except json.JSONDecodeError:
         pass
 
     # Strip residual control characters (exclude \t \n \r — valid JSON whitespace).
-    # Unconditional at this point: the two previous parse attempts already failed,
-    # so removing stray control bytes is safe regardless of string context.
-    cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", cleaned)
+    fixed = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", fixed)
     try:
-        return json.loads(cleaned), None
-    except json.JSONDecodeError as e:
-        return None, str(e)
+        return json.loads(fixed), None
+    except json.JSONDecodeError:
+        pass
+
+    # Last resort: extract the first {...} block in case the model added preamble/postamble
+    brace_match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+    if brace_match:
+        candidate = brace_match.group(0)
+        candidate = _fix_newlines_in_strings(candidate)
+        candidate = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", candidate)
+        try:
+            return json.loads(candidate), None
+        except json.JSONDecodeError as e:
+            return None, str(e)
+
+    return None, "no JSON object found in response"
 
 
 def validate_response(obj: dict) -> tuple[bool, str | None]:
