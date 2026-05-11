@@ -307,7 +307,7 @@ with tab_run:
         run_btn = st.button("🚀 Run", type="primary", use_container_width=True)
         if run_btn:
             client = get_client()
-            system_prompt = get_system_prompt()
+            system_prompt = get_system_prompt().replace("{max_tokens}", str(max_tokens - 200))
 
             with st.spinner(f"Running {len(filtered) * len(selected_models)} calls..."):
                 results = run_parallel(
