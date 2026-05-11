@@ -22,7 +22,7 @@ from config import (
     TAVILY_MONTHLY_LIMIT,
 )
 from core.client import ApolloClient
-from core.prompt_builder import load_prompts, save_prompts, generate_prompt_via_llm, add_prompt
+from core.prompt_builder import load_prompts, save_prompts, generate_prompt_via_llm, generate_prompts_batch_via_llm, add_prompt
 from core.runner import run_parallel, ModelResult
 from core.brand_groups import load_brand_groups, save_brand_groups, normalize_brands_in_df
 
@@ -161,6 +161,28 @@ def results_to_df(results: list[ModelResult], brand_groups: list[dict] | None = 
     if brand_groups:
         normalize_brands_in_df(df, brand_groups)
     return df
+
+
+def _grouped_bar(data: pd.DataFrame, x: str, color: str, y: str = "Count", facet: str | None = None):
+    """Altair grouped (side-by-side) bar chart. Optionally faceted by a column."""
+    import altair as alt
+    base = (
+        alt.Chart(data)
+        .mark_bar()
+        .encode(
+            x=alt.X(f"{x}:N", title=x, axis=alt.Axis(labelAngle=-30)),
+            xOffset=alt.XOffset(f"{color}:N"),
+            y=alt.Y(f"{y}:Q", title=y),
+            color=alt.Color(f"{color}:N"),
+            tooltip=[x, color, y],
+        )
+    )
+    if facet:
+        return (
+            base.facet(column=alt.Column(f"{facet}:N", title=facet))
+            .resolve_scale(x="independent")
+        )
+    return base.properties(height=300)
 
 
 def _tavily_usage_widget() -> None:
@@ -414,13 +436,18 @@ with tab_prompts:
     with col_b4:
         batch_cat = st.selectbox("Category", ["(none)"] + AVAILABLE_CATEGORIES, key="batch_cat")
     with col_b5:
-        batch_n = st.number_input("How many", min_value=1, max_value=50, value=5, key="batch_n")
+        batch_n = st.number_input("How many per combination", min_value=1, max_value=20, value=1, key="batch_n")
+
+    batch_total = batch_n * len(batch_tones) * len(batch_langs)
+    st.metric("Total prompts to generate", batch_total)
 
     batch_model = st.selectbox(
         "Generator model",
-        options=selected_models if selected_models else AVAILABLE_MODELS[:1],
+        options=AVAILABLE_MODELS,
+        index=AVAILABLE_MODELS.index("claude_3_5_sonnet") if "claude_3_5_sonnet" in AVAILABLE_MODELS else 0,
         key="batch_gen_model",
     )
+    st.caption("💡 Batch generation uses a single call per 10 prompts — a more capable model is recommended.")
 
     if st.button("✨ Generate batch"):
         if not batch_topic.strip():
@@ -430,37 +457,21 @@ with tab_prompts:
         elif not batch_langs:
             st.warning("Select at least one language.")
         else:
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-            import itertools
-
             client = get_client()
-            combinations = list(itertools.cycle(
-                [(t, l) for t in batch_tones for l in batch_langs]
-            ))[:batch_n]
+            combinations = [(t, l) for t in batch_tones for l in batch_langs] * batch_n
 
-            def _gen(tone, lang):
-                return generate_prompt_via_llm(
-                    client=client,
-                    topic=batch_topic,
-                    tone=tone,
-                    language=lang,
-                    model=batch_model,
-                ), tone, lang
-
+            n_calls = max(1, -(-len(combinations) // 10))  # ceil(total / 10)
             generated_batch = []
-            errors = []
-            with st.spinner(f"Generating {batch_n} prompts in parallel…"):
-                with ThreadPoolExecutor(max_workers=min(batch_n, 8)) as ex:
-                    futures = [ex.submit(_gen, tone, lang) for tone, lang in combinations]
-                    for f in as_completed(futures):
-                        try:
-                            text, tone, lang = f.result()
-                            generated_batch.append({"prompt": text, "tone": tone, "language": lang})
-                        except Exception as exc:
-                            errors.append(str(exc))
-
-            if errors:
-                st.warning(f"{len(errors)} generation(s) failed: {errors[0]}")
+            try:
+                with st.spinner(f"Generating {batch_total} prompts in {n_calls} call(s)…"):
+                    generated_batch = generate_prompts_batch_via_llm(
+                        client=client,
+                        topic=batch_topic,
+                        combinations=combinations,
+                        model=batch_model,
+                    )
+            except Exception as exc:
+                st.error(f"Batch generation failed: {exc}")
             if generated_batch:
                 _batch_cat_val = batch_cat if batch_cat != "(none)" else None
                 for item in generated_batch:
@@ -538,9 +549,9 @@ with tab_results:
             mentions = (
                 ok_df.groupby(["Preferred Brand", "Model"])
                 .size()
-                .unstack(fill_value=0)
+                .reset_index(name="Count")
             )
-            st.bar_chart(mentions)
+            st.altair_chart(_grouped_bar(mentions, "Preferred Brand", "Model"), use_container_width=True)
         else:
             st.info("No successful results to chart.")
 
@@ -562,19 +573,16 @@ with tab_results:
                     if sub.empty:
                         continue
                     with st.expander(f"Category: **{cat}** ({len(sub)} results)", expanded=True):
-                        pivot = (
+                        summary = (
                             sub.groupby(["Preferred Brand", "Model"])
                             .size()
-                            .unstack(fill_value=0)
-                        )
-                        st.bar_chart(pivot)
-                        summary = (
-                            sub.groupby(["Model", "Preferred Brand"])
-                            .size()
                             .reset_index(name="Count")
-                            .sort_values(["Model", "Count"], ascending=[True, False])
                         )
-                        st.dataframe(summary, use_container_width=True, hide_index=True)
+                        st.altair_chart(_grouped_bar(summary, "Preferred Brand", "Model"), use_container_width=True)
+                        st.dataframe(
+                            summary.sort_values(["Model", "Count"], ascending=[True, False]),
+                            use_container_width=True, hide_index=True,
+                        )
 
         # --- Comparison by tone ---
         tones_present = sorted(ok_df["Tone"].dropna().unique()) if not ok_df.empty else []
@@ -589,24 +597,19 @@ with tab_results:
             )
             tone_df = ok_df[ok_df["Tone"].isin(tone_filter)]
             if not tone_df.empty:
-                for tone in tone_filter:
-                    sub = tone_df[tone_df["Tone"] == tone]
-                    if sub.empty:
-                        continue
-                    with st.expander(f"Tone: **{tone}** ({len(sub)} results)", expanded=True):
-                        pivot = (
-                            sub.groupby(["Preferred Brand", "Model"])
-                            .size()
-                            .unstack(fill_value=0)
-                        )
-                        st.bar_chart(pivot)
-                        summary = (
-                            sub.groupby(["Model", "Preferred Brand"])
-                            .size()
-                            .reset_index(name="Count")
-                            .sort_values(["Model", "Count"], ascending=[True, False])
-                        )
-                        st.dataframe(summary, use_container_width=True, hide_index=True)
+                tone_summary = (
+                    tone_df.groupby(["Tone", "Preferred Brand", "Model"])
+                    .size()
+                    .reset_index(name="Count")
+                )
+                st.altair_chart(
+                    _grouped_bar(tone_summary, "Preferred Brand", "Model", facet="Tone"),
+                    use_container_width=True,
+                )
+                st.dataframe(
+                    tone_summary.sort_values(["Tone", "Model", "Count"], ascending=[True, True, False]),
+                    use_container_width=True, hide_index=True,
+                )
 
         st.subheader("Average confidence by model")
         if not ok_df.empty:
