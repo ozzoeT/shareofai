@@ -244,7 +244,7 @@ product purchase advice. Analyse which brands are preferred, with what confidenc
 """
 )
 
-tab_run, tab_prompts, tab_results, tab_brands, tab_content = st.tabs(["▶️ Run Test", "📝 Prompts", "📊 Results", "🏷️ Brand Groups", "🔬 Content Analysis"])
+tab_run, tab_prompts, tab_results, tab_brands, tab_content, tab_source_eval = st.tabs(["▶️ Run Test", "📝 Prompts", "📊 Results", "🏷️ Brand Groups", "🔬 Content Analysis", "🧭 Source Evaluation"])
 
 brand_groups = load_brand_groups()
 
@@ -887,4 +887,146 @@ with tab_content:
                         file_name="content_analysis.md",
                         mime="text/markdown",
                         key="dl_content_analysis",
+                    )
+
+with tab_source_eval:
+    st.header("Source Evaluation Summary")
+    st.markdown(
+        "Aggregates the compact `source_evaluation` digest that each model attaches to its "
+        "response (source strength, tone, decisive factor) and synthesizes one overall "
+        "evaluation per brand — without re-reading raw snippets, keeping token usage low."
+    )
+
+    if "last_results" not in st.session_state:
+        st.info("Run a test first, or load a JSON file in the Results tab.")
+    else:
+        _se_results: list[ModelResult] = st.session_state["last_results"]
+        _se_ok = [r for r in _se_results if r.success and r.source_evaluation]
+
+        if not _se_ok:
+            st.warning(
+                "No successful results with a `source_evaluation` digest found. "
+                "Run a new test — older results predate this field."
+            )
+        else:
+            from collections import defaultdict
+
+            # Group digests by normalized preferred_brand
+            _brand_digests: dict[str, list[dict]] = defaultdict(list)
+            for _r in _se_ok:
+                _brand = normalize_brand(_r.preferred_brand, brand_groups)
+                _se = _r.source_evaluation
+                _brand_digests[_brand].append({
+                    "source_strength": _se.get("source_strength", ""),
+                    "source_strength_reason": _se.get("source_strength_reason", ""),
+                    "tone_detected": _se.get("tone_detected", ""),
+                    "tone_alignment": _se.get("tone_alignment", ""),
+                    "decisive_factor": _se.get("decisive_factor", ""),
+                    "model": _r.model,
+                    "prompt": _r.user_prompt,
+                })
+
+            _se_brands_available = sorted(_brand_digests.keys())
+
+            col_se1, col_se2 = st.columns(2)
+            with col_se1:
+                st.metric("Brands with digests", len(_se_brands_available))
+            with col_se2:
+                st.metric("Digests collected", len(_se_ok))
+
+            _se_brands_to_compare = st.multiselect(
+                "Select brands to evaluate",
+                options=_se_brands_available,
+                default=_se_brands_available[:min(3, len(_se_brands_available))],
+                key="source_eval_brands",
+            )
+
+            if not _se_brands_to_compare:
+                st.warning("Select at least one brand.")
+            else:
+                for _brand in _se_brands_to_compare:
+                    _digests = _brand_digests[_brand]
+                    _strength_counts = defaultdict(int)
+                    _alignment_counts = defaultdict(int)
+                    for _d in _digests:
+                        _strength_counts[_d["source_strength"] or "unknown"] += 1
+                        _alignment_counts[_d["tone_alignment"] or "unknown"] += 1
+
+                    with st.expander(f"**{_brand}** — {len(_digests)} digests"):
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            st.caption("Source strength distribution")
+                            st.write(dict(_strength_counts))
+                        with c2:
+                            st.caption("Tone alignment distribution")
+                            st.write(dict(_alignment_counts))
+                        for _d in _digests[:8]:
+                            st.markdown(
+                                f"- **{_d['source_strength'] or '?'}** "
+                                f"(tone: {_d['tone_detected'] or '?'}, alignment: {_d['tone_alignment'] or '?'}) "
+                                f"— {_d['source_strength_reason']}\n"
+                                f"  - decisive factor: _{_d['decisive_factor']}_ "
+                                f"(`{_d['model']}`)"
+                            )
+
+                st.subheader("LLM Brand Synthesis")
+
+                _se_analysis_model = st.selectbox(
+                    "Synthesis model",
+                    options=AVAILABLE_MODELS,
+                    index=AVAILABLE_MODELS.index("claude_4_6_sonnet") if "claude_4_6_sonnet" in AVAILABLE_MODELS else 0,
+                    key="source_eval_model",
+                )
+
+                if st.button("🧭 Run synthesis", type="primary", key="run_source_eval_synthesis"):
+                    _se_sections = []
+                    for _brand in _se_brands_to_compare:
+                        _digests = _brand_digests[_brand]
+                        _parts = [
+                            f"- strength={_d['source_strength']}, tone={_d['tone_detected']}, "
+                            f"alignment={_d['tone_alignment']}: {_d['source_strength_reason']} "
+                            f"(decisive factor: {_d['decisive_factor']})"
+                            for _d in _digests
+                        ]
+                        _se_sections.append(
+                            f"### Brand: {_brand} ({len(_digests)} digests)\n" + "\n".join(_parts)
+                        )
+
+                    _se_prompt = (
+                        "You are reviewing compact per-response evaluation digests collected while an AI "
+                        "answered veterinary product questions and recommended specific brands. Each digest "
+                        "is the AI's own brief self-assessment of the sources/knowledge it relied on for that "
+                        "single recommendation (strength relative to the recommended brand, dominant tone, "
+                        "tone alignment with the requested tone, and the single most decisive factor).\n\n"
+                        + "\n\n".join(_se_sections)
+                        + "\n\nFor each brand, summarize:\n"
+                        "1. **Overall source strength**: Are the sources behind this brand's recommendations "
+                        "generally strong, mixed, or weak — and why (cite recurring reasons)?\n"
+                        "2. **Tone**: What tone dominates, and how well does it align with the tone the AI was "
+                        "asked to use? Note any recurring misalignments.\n"
+                        "3. **Decisive factors**: What recurring elements tip the decision toward this brand?\n\n"
+                        "Then add a brief comparative conclusion: which brand's case is most solidly supported, "
+                        "and which is weakest, and why. Be concise and base every claim only on the digests above."
+                    )
+
+                    with st.spinner("Synthesizing…"):
+                        try:
+                            _se_resp = get_client().chat(
+                                messages=[{"role": "user", "content": _se_prompt}],
+                                model=_se_analysis_model,
+                                temperature=0.3,
+                                max_tokens=2000,
+                            )
+                            st.session_state["source_eval_synthesis"] = _se_resp.choices[0].message.content
+                        except Exception as _exc:
+                            st.error(f"Synthesis failed: {_exc}")
+
+                if "source_eval_synthesis" in st.session_state:
+                    st.markdown(st.session_state["source_eval_synthesis"])
+                    st.download_button(
+                        "⬇️ Download synthesis",
+                        data=st.session_state["source_eval_synthesis"].encode("utf-8"),
+                        file_name="source_evaluation_synthesis.md",
+                        mime="text/markdown",
+                        key="dl_source_eval_synthesis",
                     )
