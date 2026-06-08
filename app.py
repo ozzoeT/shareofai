@@ -611,6 +611,45 @@ with tab_results:
                     use_container_width=True, hide_index=True,
                 )
 
+                # --- Radar chart: brand coverage per tone ---
+                st.markdown("**Brand coverage by tone (radar)**")
+                st.caption(
+                    "For each tone (vertex), the share of prompts with that tone where the brand "
+                    "was the preferred one — at a glance, which brands 'own' which tones."
+                )
+                import plotly.graph_objects as go
+
+                _radar_brands = st.multiselect(
+                    "Brands to plot",
+                    options=sorted(tone_df["Preferred Brand"].dropna().unique()),
+                    default=sorted(tone_df["Preferred Brand"].dropna().unique())[:5],
+                    key="radar_brands",
+                )
+                if _radar_brands:
+                    _tone_totals = tone_df.groupby("Tone").size()
+                    _fig = go.Figure()
+                    for _brand in _radar_brands:
+                        _brand_df = tone_df[tone_df["Preferred Brand"] == _brand]
+                        _per_tone = _brand_df.groupby("Tone").size()
+                        _r = [
+                            (_per_tone.get(_t, 0) / _tone_totals[_t] * 100) if _tone_totals[_t] else 0
+                            for _t in tone_filter
+                        ]
+                        _fig.add_trace(go.Scatterpolar(
+                            r=_r + [_r[0]],
+                            theta=tone_filter + [tone_filter[0]],
+                            fill="toself",
+                            name=_brand,
+                        ))
+                    _fig.update_layout(
+                        polar=dict(radialaxis=dict(visible=True, range=[0, 100], ticksuffix="%")),
+                        showlegend=True,
+                        height=450,
+                    )
+                    st.plotly_chart(_fig, use_container_width=True)
+                else:
+                    st.info("Select at least one brand to plot.")
+
         st.subheader("Average confidence by model")
         if not ok_df.empty:
             conf_df = ok_df.groupby("Model")["Confidence"].mean().reset_index()
