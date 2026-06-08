@@ -971,6 +971,15 @@ with tab_source_eval:
 
                 st.subheader("LLM Brand Synthesis")
 
+                _se_uploaded = st.file_uploader(
+                    "Load a previously saved synthesis (.md)",
+                    type="md",
+                    key="source_eval_synthesis_uploader",
+                )
+                if _se_uploaded is not None:
+                    st.session_state["source_eval_synthesis"] = _se_uploaded.read().decode("utf-8")
+                    st.success(f"Loaded synthesis from **{_se_uploaded.name}**.")
+
                 _se_analysis_model = st.selectbox(
                     "Synthesis model",
                     options=AVAILABLE_MODELS,
