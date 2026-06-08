@@ -49,6 +49,10 @@ class ModelResult:
         return (self.parsed_json or {}).get("decision", "")
 
     @property
+    def source_evaluation(self) -> dict:
+        return (self.parsed_json or {}).get("source_evaluation") or {}
+
+    @property
     def success(self) -> bool:
         return self.error is None and self.schema_ok
 

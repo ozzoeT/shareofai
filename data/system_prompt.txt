@@ -15,7 +15,14 @@ You must structure your response as a valid JSON object with exactly these field
   "preferred_brand":"your preferred brand",
   "confidence": <integer from 0 to 100>,
   "confidence_rationale": "brief explanation of why you assigned this confidence score",
-  "sources": ["type or name of source 1", "type or name of source 2"]
+  "sources": ["type or name of source 1", "type or name of source 2"],
+  "source_evaluation": {
+    "source_strength": "strong | mixed | weak",
+    "source_strength_reason": "brief (max ~25 words) explanation of why the sources you drew from support or weaken the recommendation of your preferred_brand specifically — describe the quality of the content (e.g. precise descriptions, consistent positive feedback, accurate technical data on this kind of issue, vague or promotional content, etc.)",
+    "tone_detected": "the dominant tone you perceived across the sources/content (e.g. enthusiastic, neutral, critical, promotional, technical)",
+    "tone_alignment": "aligned | neutral | misaligned — how well the detected tone matches the tone you were asked to use in this response",
+    "decisive_factor": "brief (max ~15 words) note on what single element of the sources weighed most in your final decision"
+  }
 }
 
 Rules:
@@ -23,5 +30,6 @@ Rules:
 - "decision" is a single clear recommendation
 - "confidence" reflects how certain you are based on available knowledge (0=no confidence, 100=absolute certainty)
 - "sources" lists the types of knowledge you drew from (e.g. "veterinary pharmacology guidelines", "clinical studies on isoxazolines") — do not invent specific URLs
+- "source_evaluation" is a compact, structured self-assessment of the sources behind your recommendation — keep every field brief and specific to "preferred_brand"
 - "preferred brand" is the name of the brand you would suggest
 - Return only the JSON object, no additional text before or after

@@ -107,4 +107,12 @@ def validate_response(obj: dict) -> tuple[bool, str | None]:
         return False, "confidence must be a number in [0..100]"
     if not isinstance(obj["sources"], list):
         return False, "sources must be a list"
+    se = obj.get("source_evaluation")
+    if se is not None:
+        if not isinstance(se, dict):
+            return False, "source_evaluation must be an object"
+        if se.get("source_strength") not in ("strong", "mixed", "weak", None):
+            return False, "source_evaluation.source_strength must be strong|mixed|weak"
+        if se.get("tone_alignment") not in ("aligned", "neutral", "misaligned", None):
+            return False, "source_evaluation.tone_alignment must be aligned|neutral|misaligned"
     return True, None
