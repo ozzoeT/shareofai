@@ -86,19 +86,31 @@ def get_system_prompt() -> str:
         st.stop()
 
 
-def json_to_results(raw: str) -> list[ModelResult]:
+def json_to_results(raw: str) -> tuple[list[ModelResult], list[dict] | None]:
+    """
+    Returns (results, brand_groups).
+    brand_groups is None for old bare-array files (backward compat).
+    """
     import dataclasses
     from datetime import datetime as dt
     valid_keys = {f.name for f in dataclasses.fields(ModelResult)}
-    rows = json.loads(raw)
+    parsed = json.loads(raw)
+    # New format: {"brand_groups": [...], "results": [...]}
+    # Old format: bare list
+    if isinstance(parsed, dict):
+        rows = parsed.get("results", [])
+        saved_groups = parsed.get("brand_groups") or None
+    else:
+        rows = parsed
+        saved_groups = None
     results = []
     for d in rows:
         d["timestamp"] = dt.fromisoformat(d["timestamp"])
         results.append(ModelResult(**{k: v for k, v in d.items() if k in valid_keys}))
-    return results
+    return results, saved_groups
 
 
-def results_to_json(results: list[ModelResult]) -> str:
+def results_to_json(results: list[ModelResult], brand_groups: list[dict] | None = None) -> str:
     import dataclasses
 
     class _Encoder(json.JSONEncoder):
@@ -113,7 +125,8 @@ def results_to_json(results: list[ModelResult]) -> str:
         d = dataclasses.asdict(r)
         d["timestamp"] = r.timestamp.isoformat()
         rows.append(d)
-    return json.dumps(rows, cls=_Encoder, ensure_ascii=False, indent=2)
+    envelope = {"brand_groups": brand_groups or [], "results": rows}
+    return json.dumps(envelope, cls=_Encoder, ensure_ascii=False, indent=2)
 
 
 def _download_buttons(results: list[ModelResult], df: pd.DataFrame, key_suffix: str) -> None:
@@ -131,7 +144,7 @@ def _download_buttons(results: list[ModelResult], df: pd.DataFrame, key_suffix: 
     with col2:
         st.download_button(
             label="⬇️ Download JSON",
-            data=results_to_json(results).encode("utf-8"),
+            data=results_to_json(results, st.session_state.get("loaded_brand_groups", load_brand_groups())).encode("utf-8"),
             file_name=f"shareofai_{ts}.json",
             mime="application/json",
             use_container_width=True,
@@ -238,6 +251,11 @@ with st.sidebar:
 
     st.divider()
     st.caption("Share of AI — Prototype v0.2")
+
+
+# active_brand_groups: prefer groups loaded from a saved file, fall back to
+# the groups configured in the Brand Groups tab.
+active_brand_groups: list[dict] = st.session_state.get("loaded_brand_groups", brand_groups)
 
 
 # ---------------------------------------------------------------------------
@@ -354,7 +372,7 @@ with tab_run:
                     _autosave_path = "/tmp/shareofai_autosave.json"
                     try:
                         with open(_autosave_path, "w", encoding="utf-8") as _f:
-                            _f.write(results_to_json(st.session_state["last_results"]))
+                            _f.write(results_to_json(st.session_state["last_results"], active_brand_groups))
                     except Exception:
                         pass
 
@@ -367,7 +385,7 @@ with tab_run:
                 f"Auto-saved to `{_autosave_path}` every {_autosave_every} completions."
             )
 
-            df = results_to_df(results, brand_groups if use_brand_groups else None)
+            df = results_to_df(results, active_brand_groups if use_brand_groups else None)
             st.dataframe(df, use_container_width=True)
 
             st.subheader("Brand preference summary")
@@ -559,9 +577,18 @@ with tab_results:
     )
     if uploaded is not None:
         try:
-            loaded = json_to_results(uploaded.read().decode("utf-8"))
+            loaded, loaded_groups = json_to_results(uploaded.read().decode("utf-8"))
             st.session_state["last_results"] = loaded
-            st.success(f"Loaded {len(loaded)} results from **{uploaded.name}**.")
+            if loaded_groups:
+                st.session_state["loaded_brand_groups"] = loaded_groups
+                st.success(
+                    f"Loaded {len(loaded)} results from **{uploaded.name}** "
+                    f"with {len(loaded_groups)} saved brand group(s). "
+                    "The saved grouping is now active."
+                )
+            else:
+                st.session_state.pop("loaded_brand_groups", None)
+                st.success(f"Loaded {len(loaded)} results from **{uploaded.name}** (no brand groups in file — using current config).")
         except Exception as exc:
             st.error(f"Could not parse file: {exc}")
 
@@ -569,7 +596,7 @@ with tab_results:
         st.info("Run a test first or load a previously saved JSON file.")
     else:
         results: list[ModelResult] = st.session_state["last_results"]
-        _active_groups = brand_groups if use_brand_groups else None
+        _active_groups = active_brand_groups if use_brand_groups else None
         df = results_to_df(results, _active_groups)
 
         model_filter = st.multiselect(
@@ -917,7 +944,7 @@ with tab_content:
             # Group snippets by preferred_brand (normalized if toggle is on)
             _brand_snippets: dict[str, list[dict]] = defaultdict(list)
             for _r in _web_ok:
-                _key = normalize_brand(_r.preferred_brand, brand_groups) if use_brand_groups else _r.preferred_brand
+                _key = normalize_brand(_r.preferred_brand, active_brand_groups) if use_brand_groups else _r.preferred_brand
                 for _src in _r.search_results:
                     _brand_snippets[_key].append({
                         "snippet": _src["snippet"],
@@ -1093,7 +1120,7 @@ with tab_source_eval:
             # Group digests by preferred_brand (normalized if toggle is on)
             _brand_digests: dict[str, list[dict]] = defaultdict(list)
             for _r in _se_ok:
-                _brand = normalize_brand(_r.preferred_brand, brand_groups) if use_brand_groups else _r.preferred_brand
+                _brand = normalize_brand(_r.preferred_brand, active_brand_groups) if use_brand_groups else _r.preferred_brand
                 _se = _r.source_evaluation
                 _brand_digests[_brand].append({
                     "source_strength": _se.get("source_strength", ""),
