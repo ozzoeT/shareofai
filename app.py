@@ -306,6 +306,9 @@ with tab_run:
     else:
         run_btn = st.button("🚀 Run", type="primary", use_container_width=True)
         if run_btn:
+            if use_web_search:
+                from core.web_search import clear_cache
+                clear_cache()
             client = get_client()
             system_prompt = get_system_prompt().replace("{max_tokens}", str(max_tokens - 200))
 

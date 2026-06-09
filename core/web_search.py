@@ -16,6 +16,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from functools import lru_cache
 
 from tavily import TavilyClient
 
@@ -111,14 +112,38 @@ WEB_SEARCH_TOOL = {
 # Search execution
 # ---------------------------------------------------------------------------
 
+# Per-process in-memory cache: avoids re-calling Tavily for identical queries
+# within the same session. Thread-safe because we only read after writing under
+# the usage lock, and dict reads/writes are GIL-protected in CPython.
+_query_cache: dict[str, list[SearchResult]] = {}
+_cache_lock = threading.Lock()
+
+
+def clear_cache() -> None:
+    """Clears the in-memory query cache (call between independent runs if needed)."""
+    with _cache_lock:
+        _query_cache.clear()
+
+
 def search(query: str, max_results: int = 5) -> list[SearchResult]:
-    """Executes a Tavily search and returns structured results."""
+    """
+    Executes a Tavily search and returns structured results.
+    Identical queries (case-insensitive, stripped) are served from the
+    in-memory cache without consuming an API call.
+    """
+    cache_key = query.strip().lower()
+
+    with _cache_lock:
+        if cache_key in _query_cache:
+            return _query_cache[cache_key]
+
+    # Not cached — consume one API quota unit and fetch
     _check_and_increment_usage()
 
     client = TavilyClient(api_key=TAVILY_API_KEY)
     response = client.search(query=query, max_results=max_results)
 
-    return [
+    results = [
         SearchResult(
             url=r.get("url", ""),
             title=r.get("title", ""),
@@ -127,6 +152,11 @@ def search(query: str, max_results: int = 5) -> list[SearchResult]:
         )
         for r in response.get("results", [])
     ]
+
+    with _cache_lock:
+        _query_cache[cache_key] = results
+
+    return results
 
 
 def build_search_context(results: list[SearchResult]) -> str:

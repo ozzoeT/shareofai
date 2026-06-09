@@ -162,7 +162,7 @@ def _run_single_with_search(
         choice = resp.choices[0]
 
         # --- Tool calling loop ---
-        _MAX_TOOL_ITERATIONS = 5
+        _MAX_TOOL_ITERATIONS = 2
         _tool_iter = 0
         while choice.finish_reason == "tool_calls":
             _tool_iter += 1
