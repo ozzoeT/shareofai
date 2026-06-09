@@ -129,7 +129,7 @@ def results_to_json(results: list[ModelResult], brand_groups: list[dict] | None 
     return json.dumps(envelope, cls=_Encoder, ensure_ascii=False, indent=2)
 
 
-def _download_buttons(results: list[ModelResult], df: pd.DataFrame, key_suffix: str) -> None:
+def _download_buttons(results: list[ModelResult], df: pd.DataFrame, key_suffix: str, brand_groups: list[dict] | None = None) -> None:
     ts = results[0].timestamp.strftime("%Y%m%d_%H%M%S") if results else "run"
     col1, col2 = st.columns(2)
     with col1:
@@ -144,7 +144,7 @@ def _download_buttons(results: list[ModelResult], df: pd.DataFrame, key_suffix: 
     with col2:
         st.download_button(
             label="⬇️ Download JSON",
-            data=results_to_json(results, st.session_state.get("loaded_brand_groups", load_brand_groups())).encode("utf-8"),
+            data=results_to_json(results, brand_groups).encode("utf-8"),
             file_name=f"shareofai_{ts}.json",
             mime="application/json",
             use_container_width=True,
@@ -399,7 +399,7 @@ with tab_run:
             st.dataframe(brand_df, use_container_width=True)
 
             st.subheader("💾 Save results")
-            _download_buttons(results, df, key_suffix="run")
+            _download_buttons(results, df, key_suffix="run", brand_groups=active_brand_groups)
 
             web_results = [r for r in results if r.web_search_used and r.search_results]
             if web_results:
@@ -612,6 +612,7 @@ with tab_results:
             [r for r in results if r.model in model_filter],
             filtered_df,
             key_suffix="results",
+            brand_groups=active_brand_groups,
         )
 
         ok_df = filtered_df[filtered_df["OK"] == "✅"]
