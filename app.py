@@ -229,6 +229,14 @@ with st.sidebar:
         use_web_search = False
 
     st.divider()
+    st.subheader("📊 View mode")
+    use_brand_groups = st.toggle(
+        "Group brands by canonical name",
+        value=True,
+        help="ON → aliases are merged into their canonical group in all charts and analyses. OFF → raw brand names as returned by the model.",
+    )
+
+    st.divider()
     st.caption("Share of AI — Prototype v0.2")
 
 
@@ -359,7 +367,7 @@ with tab_run:
                 f"Auto-saved to `{_autosave_path}` every {_autosave_every} completions."
             )
 
-            df = results_to_df(results, brand_groups)
+            df = results_to_df(results, brand_groups if use_brand_groups else None)
             st.dataframe(df, use_container_width=True)
 
             st.subheader("Brand preference summary")
@@ -561,7 +569,8 @@ with tab_results:
         st.info("Run a test first or load a previously saved JSON file.")
     else:
         results: list[ModelResult] = st.session_state["last_results"]
-        df = results_to_df(results, brand_groups)
+        _active_groups = brand_groups if use_brand_groups else None
+        df = results_to_df(results, _active_groups)
 
         model_filter = st.multiselect(
             "Filter by model",
@@ -797,6 +806,91 @@ with tab_brands:
                 st.success(f"Group **{new_canonical.strip()}** saved with {len(aliases)} alias(es).")
                 st.rerun()
 
+    st.divider()
+    st.subheader("🤖 AI-suggested grouping")
+    st.markdown(
+        "Let a small model analyse all brand names seen in the last run and suggest canonical groups with aliases. "
+        "Review the suggestions, then save the ones you want."
+    )
+
+    if "last_results" not in st.session_state:
+        st.info("Run a test first — the AI will suggest groups based on the brands seen in the results.")
+    else:
+        _suggest_model = st.selectbox(
+            "Model for suggestions",
+            options=AVAILABLE_MODELS,
+            index=AVAILABLE_MODELS.index("claude_3_5_haiku") if "claude_3_5_haiku" in AVAILABLE_MODELS else 0,
+            key="suggest_groups_model",
+        )
+
+        if st.button("✨ Suggest groups", key="btn_suggest_groups"):
+            _all_brands = sorted({
+                r.preferred_brand.strip()
+                for r in st.session_state["last_results"]
+                if r.preferred_brand and r.preferred_brand.strip()
+            })
+            if not _all_brands:
+                st.warning("No brand names found in results.")
+            else:
+                _suggest_prompt = (
+                    "You are a data cleaning assistant. Below is a list of brand names extracted from "
+                    "AI-generated veterinary product recommendations. Some names refer to the same brand "
+                    "with different capitalisation, abbreviations, or slight variations.\n\n"
+                    f"Brand names: {', '.join(_all_brands)}\n\n"
+                    "Group them into canonical brands. For each group return the most correct/official "
+                    "name as 'canonical' and all variants as 'aliases'. "
+                    "If a name is already unique and has no variants, include it with an empty aliases list.\n\n"
+                    "Return ONLY a valid JSON array, no extra text:\n"
+                    '[{"canonical": "BrandName", "aliases": ["variant1", "variant2"]}, ...]'
+                )
+                with st.spinner("Asking the model…"):
+                    try:
+                        _sg_resp = get_client().chat(
+                            messages=[{"role": "user", "content": _suggest_prompt}],
+                            model=_suggest_model,
+                            temperature=0.1,
+                            max_tokens=1000,
+                        )
+                        st.session_state["suggested_groups_raw"] = _sg_resp.choices[0].message.content
+                    except Exception as _exc:
+                        st.error(f"Suggestion failed: {_exc}")
+
+        if "suggested_groups_raw" in st.session_state:
+            from core.parser import parse_json_response
+            _suggested, _parse_err = parse_json_response(st.session_state["suggested_groups_raw"])
+
+            if _parse_err or not isinstance(_suggested, list):
+                st.error("Could not parse the model's response as a JSON array. Raw output:")
+                st.code(st.session_state["suggested_groups_raw"], language="json")
+            else:
+                st.markdown(f"**{len(_suggested)} group(s) suggested** — review below, then save:")
+                for _sg in _suggested:
+                    _c1, _c2 = st.columns([2, 4])
+                    with _c1:
+                        st.markdown(f"**{_sg.get('canonical', '?')}**")
+                    with _c2:
+                        st.caption(", ".join(_sg.get("aliases", [])) or "_(no aliases)_")
+
+                col_save1, col_save2 = st.columns(2)
+                with col_save1:
+                    if st.button("💾 Replace all groups with suggestions", key="save_suggested_replace"):
+                        save_brand_groups(_suggested)
+                        del st.session_state["suggested_groups_raw"]
+                        st.success("Brand groups replaced with AI suggestions.")
+                        st.rerun()
+                with col_save2:
+                    if st.button("➕ Merge suggestions into existing groups", key="save_suggested_merge"):
+                        _existing = load_brand_groups()
+                        _existing_keys = {g["canonical"].lower() for g in _existing}
+                        _merged = _existing + [
+                            g for g in _suggested
+                            if g.get("canonical", "").lower() not in _existing_keys
+                        ]
+                        save_brand_groups(_merged)
+                        del st.session_state["suggested_groups_raw"]
+                        st.success(f"Merged: {len(_merged) - len(_existing)} new group(s) added.")
+                        st.rerun()
+
 
 # ---------------------------------------------------------------------------
 # Tab: Content Analysis
@@ -820,11 +914,12 @@ with tab_content:
         else:
             from collections import defaultdict
 
-            # Group snippets by preferred_brand
+            # Group snippets by preferred_brand (normalized if toggle is on)
             _brand_snippets: dict[str, list[dict]] = defaultdict(list)
             for _r in _web_ok:
+                _key = normalize_brand(_r.preferred_brand, brand_groups) if use_brand_groups else _r.preferred_brand
                 for _src in _r.search_results:
-                    _brand_snippets[_r.preferred_brand].append({
+                    _brand_snippets[_key].append({
                         "snippet": _src["snippet"],
                         "url": _src["url"],
                         "title": _src["title"],
@@ -995,10 +1090,10 @@ with tab_source_eval:
         else:
             from collections import defaultdict
 
-            # Group digests by normalized preferred_brand
+            # Group digests by preferred_brand (normalized if toggle is on)
             _brand_digests: dict[str, list[dict]] = defaultdict(list)
             for _r in _se_ok:
-                _brand = normalize_brand(_r.preferred_brand, brand_groups)
+                _brand = normalize_brand(_r.preferred_brand, brand_groups) if use_brand_groups else _r.preferred_brand
                 _se = _r.source_evaluation
                 _brand_digests[_brand].append({
                     "source_strength": _se.get("source_strength", ""),
