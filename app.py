@@ -897,6 +897,15 @@ with tab_content:
                     index=AVAILABLE_MODELS.index("claude_4_6_sonnet") if "claude_4_6_sonnet" in AVAILABLE_MODELS else 0,
                     key="content_analysis_model",
                 )
+                _content_max_tokens = st.slider(
+                    "Max tokens for analysis",
+                    min_value=1000,
+                    max_value=8000,
+                    value=4000,
+                    step=500,
+                    help="Increase if the report gets cut off",
+                    key="content_analysis_max_tokens",
+                )
                 _max_snippets = st.slider(
                     "Max snippets per brand",
                     min_value=5,
@@ -948,7 +957,7 @@ with tab_content:
                                 messages=[{"role": "user", "content": _analysis_prompt}],
                                 model=_analysis_model,
                                 temperature=0.3,
-                                max_tokens=2000,
+                                max_tokens=_content_max_tokens,
                             )
                             st.session_state["content_analysis"] = _resp.choices[0].message.content
                         except Exception as _exc:
@@ -1055,6 +1064,15 @@ with tab_source_eval:
                     st.session_state["source_eval_synthesis"] = _se_uploaded.read().decode("utf-8")
                     st.success(f"Loaded synthesis from **{_se_uploaded.name}**.")
 
+                _se_max_tokens = st.slider(
+                    "Max tokens for synthesis",
+                    min_value=1000,
+                    max_value=8000,
+                    value=4000,
+                    step=500,
+                    help="Increase if the report gets cut off",
+                    key="source_eval_max_tokens",
+                )
                 _se_analysis_model = st.selectbox(
                     "Synthesis model",
                     options=AVAILABLE_MODELS,
@@ -1099,7 +1117,7 @@ with tab_source_eval:
                                 messages=[{"role": "user", "content": _se_prompt}],
                                 model=_se_analysis_model,
                                 temperature=0.3,
-                                max_tokens=2000,
+                                max_tokens=_se_max_tokens,
                             )
                             st.session_state["source_eval_synthesis"] = _se_resp.choices[0].message.content
                         except Exception as _exc:
