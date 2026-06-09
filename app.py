@@ -23,7 +23,7 @@ from config import (
 )
 from core.client import ApolloClient
 from core.prompt_builder import load_prompts, save_prompts, generate_prompt_via_llm, generate_prompts_batch_via_llm, add_prompt
-from core.runner import run_parallel, ModelResult
+from core.runner import run_parallel, run_streaming, ModelResult
 from core.brand_groups import load_brand_groups, save_brand_groups, normalize_brands_in_df
 
 # ---------------------------------------------------------------------------
@@ -309,19 +309,52 @@ with tab_run:
             client = get_client()
             system_prompt = get_system_prompt().replace("{max_tokens}", str(max_tokens - 200))
 
-            with st.spinner(f"Running {len(filtered) * len(selected_models)} calls..."):
-                results = run_parallel(
-                    client=client,
-                    system_prompt=system_prompt,
-                    prompts=filtered,
-                    models=selected_models,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    use_web_search=use_web_search,
-                )
+            _total_calls = len(filtered) * len(selected_models)
+            _autosave_every = 5
+            _collected: list[ModelResult] = []
 
-            st.session_state["last_results"] = results
-            st.success(f"Done! {len(results)} results collected.")
+            _progress_bar = st.progress(0, text=f"0 / {_total_calls} completed…")
+            _status_text = st.empty()
+
+            for _result in run_streaming(
+                client=client,
+                system_prompt=system_prompt,
+                prompts=filtered,
+                models=selected_models,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                use_web_search=use_web_search,
+            ):
+                _collected.append(_result)
+                _done = len(_collected)
+                _progress_bar.progress(
+                    _done / _total_calls,
+                    text=f"{_done} / {_total_calls} completed…",
+                )
+                _status_text.caption(
+                    f"Latest: prompt #{_result.prompt_index} · {_result.model} · "
+                    f"{'✅' if _result.success else '❌'} "
+                    f"({_result.latency_s:.1f}s)"
+                )
+                if _done % _autosave_every == 0 or _done == _total_calls:
+                    st.session_state["last_results"] = sorted(
+                        _collected, key=lambda r: (r.prompt_index or 0, r.model)
+                    )
+                    _autosave_path = "/tmp/shareofai_autosave.json"
+                    try:
+                        with open(_autosave_path, "w", encoding="utf-8") as _f:
+                            _f.write(results_to_json(st.session_state["last_results"]))
+                    except Exception:
+                        pass
+
+            _progress_bar.empty()
+            _status_text.empty()
+
+            results = st.session_state["last_results"]
+            st.success(
+                f"Done! {len(results)} results collected. "
+                f"Auto-saved to `{_autosave_path}` every {_autosave_every} completions."
+            )
 
             df = results_to_df(results, brand_groups)
             st.dataframe(df, use_container_width=True)

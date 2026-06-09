@@ -9,7 +9,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, Generator
 
 from core.client import ApolloClient
 from core.parser import parse_json_response, validate_response
@@ -262,6 +262,62 @@ def _run_single_with_search(
 # Public API
 # ---------------------------------------------------------------------------
 
+def _build_futures(
+    executor: ThreadPoolExecutor,
+    runner,
+    client: ApolloClient,
+    system_prompt: str,
+    prompts: list[dict],
+    models: list[str],
+    temperature: float,
+    max_tokens: int,
+) -> dict:
+    tasks = [
+        (i, item, model)
+        for i, item in enumerate(prompts)
+        for model in models
+    ]
+    return {
+        executor.submit(
+            runner,
+            client,
+            model,
+            system_prompt,
+            item["prompt"],
+            i,
+            item.get("tone"),
+            item.get("language"),
+            item.get("category"),
+            temperature,
+            max_tokens,
+        ): (i, model)
+        for i, item, model in tasks
+    }
+
+
+def run_streaming(
+    client: ApolloClient,
+    system_prompt: str,
+    prompts: list[dict],
+    models: list[str],
+    temperature: float = 0.2,
+    max_tokens: int = 2000,
+    max_workers: int = 8,
+    use_web_search: bool = False,
+) -> Generator[ModelResult, None, None]:
+    """
+    Same as run_parallel but yields each ModelResult as soon as it completes,
+    allowing the caller to update progress and autosave incrementally.
+    """
+    runner = _run_single_with_search if use_web_search else _run_single
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = _build_futures(
+            executor, runner, client, system_prompt, prompts, models, temperature, max_tokens
+        )
+        for future in as_completed(futures):
+            yield future.result()
+
+
 def run_parallel(
     client: ApolloClient,
     system_prompt: str,
@@ -275,42 +331,12 @@ def run_parallel(
     """
     Runs every prompt against every model in parallel.
 
-    Args:
-        prompts: list of dicts with key 'prompt', optionally 'tone' and 'language'.
-        models: list of model ids to test.
-        use_web_search: if True, uses tool calling + Tavily search.
-
     Returns:
         List of ModelResult sorted by (prompt_index, model).
     """
-    runner = _run_single_with_search if use_web_search else _run_single
-
-    tasks = [
-        (i, item, model)
-        for i, item in enumerate(prompts)
-        for model in models
-    ]
-
-    results: list[ModelResult] = []
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {
-            executor.submit(
-                runner,
-                client,
-                model,
-                system_prompt,
-                item["prompt"],
-                i,
-                item.get("tone"),
-                item.get("language"),
-                item.get("category"),
-                temperature,
-                max_tokens,
-            ): (i, model)
-            for i, item, model in tasks
-        }
-        for future in as_completed(futures):
-            results.append(future.result())
+    results = list(run_streaming(
+        client, system_prompt, prompts, models, temperature, max_tokens, max_workers, use_web_search
+    ))
 
     results.sort(key=lambda r: (r.prompt_index or 0, r.model))
     return results
