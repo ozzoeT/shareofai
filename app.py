@@ -253,11 +253,6 @@ with st.sidebar:
     st.caption("Share of AI — Prototype v0.2")
 
 
-# active_brand_groups: prefer groups loaded from a saved file, fall back to
-# the groups configured in the Brand Groups tab.
-active_brand_groups: list[dict] = st.session_state.get("loaded_brand_groups", brand_groups)
-
-
 # ---------------------------------------------------------------------------
 # Main layout
 # ---------------------------------------------------------------------------
@@ -273,6 +268,9 @@ product purchase advice. Analyse which brands are preferred, with what confidenc
 tab_run, tab_prompts, tab_results, tab_brands, tab_content, tab_source_eval = st.tabs(["▶️ Run Test", "📝 Prompts", "📊 Results", "🏷️ Brand Groups", "🔬 Content Analysis", "🧭 Source Evaluation"])
 
 brand_groups = load_brand_groups()
+
+# Prefer groups loaded from a saved file, fall back to current config.
+active_brand_groups: list[dict] = st.session_state.get("loaded_brand_groups", brand_groups)
 
 
 # ---------------------------------------------------------------------------
