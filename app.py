@@ -24,7 +24,7 @@ from config import (
 from core.client import ApolloClient
 from core.prompt_builder import load_prompts, save_prompts, generate_prompt_via_llm, generate_prompts_batch_via_llm, add_prompt
 from core.runner import run_parallel, run_streaming, ModelResult
-from core.brand_groups import load_brand_groups, save_brand_groups, normalize_brands_in_df
+from core.brand_groups import load_brand_groups, save_brand_groups, normalize_brand, normalize_brands_in_df
 
 # ---------------------------------------------------------------------------
 # Page config
