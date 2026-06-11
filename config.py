@@ -18,6 +18,10 @@ SYSTEM_PROMPT_PATH = DATA_DIR / "system_prompt.txt"
 PROMPTS_PATH = DATA_DIR / "prompts.json"
 BRAND_GROUPS_PATH = DATA_DIR / "brand_groups.json"
 
+# Autosave directory for in-progress runs (not committed — see .gitignore)
+AUTOSAVE_DIR = BASE_DIR / "autosave"
+AUTOSAVE_PATH = AUTOSAVE_DIR / "last_run_autosave.json"
+
 # --- Apollo / LLM Gateway ---
 APOLLO_CLIENT_ID = os.getenv("APOLLO_CLIENT_ID", "")
 APOLLO_CLIENT_SECRET = os.getenv("APOLLO_CLIENT_SECRET", "")

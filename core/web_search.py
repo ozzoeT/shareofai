@@ -16,7 +16,6 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from functools import lru_cache
 
 from tavily import TavilyClient
 

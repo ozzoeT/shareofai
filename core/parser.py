@@ -115,4 +115,8 @@ def validate_response(obj: dict) -> tuple[bool, str | None]:
             return False, "source_evaluation.source_strength must be strong|mixed|weak"
         if se.get("tone_alignment") not in ("aligned", "neutral", "misaligned", None):
             return False, "source_evaluation.tone_alignment must be aligned|neutral|misaligned"
+        for _key in ("source_strength_reason", "tone_detected", "decisive_factor"):
+            _val = se.get(_key)
+            if _val is not None and not isinstance(_val, str):
+                return False, f"source_evaluation.{_key} must be a string"
     return True, None

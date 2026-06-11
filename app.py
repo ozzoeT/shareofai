@@ -20,10 +20,15 @@ from config import (
     SYSTEM_PROMPT_PATH,
     WEB_SEARCH_ENABLED,
     TAVILY_MONTHLY_LIMIT,
+    TAVILY_API_KEY,
+    APOLLO_CLIENT_ID,
+    APOLLO_CLIENT_SECRET,
+    AUTOSAVE_DIR,
+    AUTOSAVE_PATH,
 )
 from core.client import ApolloClient
 from core.prompt_builder import load_prompts, save_prompts, generate_prompt_via_llm, generate_prompts_batch_via_llm, add_prompt
-from core.runner import run_parallel, run_streaming, ModelResult
+from core.runner import run_streaming, ModelResult
 from core.brand_groups import load_brand_groups, save_brand_groups, normalize_brand, normalize_brands_in_df
 
 # ---------------------------------------------------------------------------
@@ -34,6 +39,23 @@ st.set_page_config(
     page_icon="🐾",
     layout="wide",
 )
+
+# ---------------------------------------------------------------------------
+# Credential checks — fail fast with a clear message instead of a cryptic
+# error from the Apollo/Tavily SDKs at first call time.
+# ---------------------------------------------------------------------------
+if not APOLLO_CLIENT_ID or not APOLLO_CLIENT_SECRET:
+    st.error(
+        "Missing Apollo credentials: set `APOLLO_CLIENT_ID` and `APOLLO_CLIENT_SECRET` "
+        "(env vars or `.env` file) before running the app."
+    )
+    st.stop()
+
+if WEB_SEARCH_ENABLED and not TAVILY_API_KEY:
+    st.warning(
+        "`TAVILY_API_KEY` is not set — web search will fail if enabled. "
+        "Set it in your environment or `.env` file, or disable web search."
+    )
 
 st.markdown("""
 <style>
@@ -367,12 +389,14 @@ with tab_run:
                     st.session_state["last_results"] = sorted(
                         _collected, key=lambda r: (r.prompt_index or 0, r.model)
                     )
-                    _autosave_path = "/tmp/shareofai_autosave.json"
                     try:
-                        with open(_autosave_path, "w", encoding="utf-8") as _f:
-                            _f.write(results_to_json(st.session_state["last_results"], active_brand_groups))
-                    except Exception:
-                        pass
+                        AUTOSAVE_DIR.mkdir(parents=True, exist_ok=True)
+                        AUTOSAVE_PATH.write_text(
+                            results_to_json(st.session_state["last_results"], active_brand_groups),
+                            encoding="utf-8",
+                        )
+                    except OSError as _exc:
+                        st.warning(f"Autosave failed ({_exc}) — results are still kept in memory.")
 
             _progress_bar.empty()
             _status_text.empty()
@@ -380,7 +404,7 @@ with tab_run:
             results = st.session_state["last_results"]
             st.success(
                 f"Done! {len(results)} results collected. "
-                f"Auto-saved to `{_autosave_path}` every {_autosave_every} completions."
+                f"Auto-saved to `{AUTOSAVE_PATH}` every {_autosave_every} completions."
             )
 
             df = results_to_df(results, active_brand_groups if use_brand_groups else None)
@@ -476,7 +500,7 @@ with tab_prompts:
             )
             save_prompts(prompts)
             st.success("Prompt saved!")
-            del st.session_state["generated_prompt"]
+            st.session_state.pop("generated_prompt", None)
             st.rerun()
 
     st.divider()
@@ -553,11 +577,11 @@ with tab_prompts:
                     prompts = add_prompt(prompts, p["prompt"], p["tone"], p["language"], p.get("category"))
                 save_prompts(prompts)
                 st.success(f"{len(batch)} prompts saved!")
-                del st.session_state["generated_batch"]
+                st.session_state.pop("generated_batch", None)
                 st.rerun()
         with col_discard:
             if st.button("🗑️ Discard", use_container_width=True):
-                del st.session_state["generated_batch"]
+                st.session_state.pop("generated_batch", None)
                 st.rerun()
 
 
@@ -901,7 +925,7 @@ with tab_brands:
                 with col_save1:
                     if st.button("💾 Replace all groups with suggestions", key="save_suggested_replace"):
                         save_brand_groups(_suggested)
-                        del st.session_state["suggested_groups_raw"]
+                        st.session_state.pop("suggested_groups_raw", None)
                         st.success("Brand groups replaced with AI suggestions.")
                         st.rerun()
                 with col_save2:
@@ -913,7 +937,7 @@ with tab_brands:
                             if g.get("canonical", "").lower() not in _existing_keys
                         ]
                         save_brand_groups(_merged)
-                        del st.session_state["suggested_groups_raw"]
+                        st.session_state.pop("suggested_groups_raw", None)
                         st.success(f"Merged: {len(_merged) - len(_existing)} new group(s) added.")
                         st.rerun()
 
