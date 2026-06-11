@@ -3,28 +3,24 @@
 Tracciamento di problemi noti e migliorie da affrontare in sessioni dedicate.
 Aggiornato: 2026-06-11.
 
-## 🔴 Priorità alta (robustezza)
+## ✅ Fase 0 — completata (commit 3120e6e)
 
-- [ ] **Validazione credenziali all'avvio** — `APOLLO_CLIENT_ID/SECRET` e `TAVILY_API_KEY`
-  sono caricate con default vuoti e mai validate (`config.py`); errori a runtime poco chiari.
-  Aggiungere check all'avvio con messaggio chiaro in UI.
-- [ ] **Autosave path hardcoded `/tmp`** (`app.py`) — non persistente al reboot, problematico
-  multi-utente; eccezione di scrittura silenziata (`except: pass`). Spostare in una
-  directory dati del progetto e segnalare i fallimenti.
-- [ ] **Schema mismatch `source_evaluation`** — il system prompt richiede
-  `source_strength_reason`, `tone_detected`, `decisive_factor` ma `core/parser.py` valida
-  solo `source_strength` e `tone_alignment`; risposte incomplete passano la validazione
-  e la UI assume che i campi esistano.
+- [x] **Validazione credenziali all'avvio** — check su `APOLLO_CLIENT_ID/SECRET` e
+  `TAVILY_API_KEY` con messaggi chiari in UI (`app.py`).
+- [x] **Autosave path hardcoded `/tmp`** — spostato in `autosave/` (gitignored),
+  errori di scrittura segnalati con `st.warning`.
+- [x] **Schema mismatch `source_evaluation`** — `core/parser.py` ora valida i tipi di
+  `source_strength_reason`, `tone_detected`, `decisive_factor`.
+- [x] Import morti rimossi (`lru_cache`, `run_parallel`).
+- [x] `altair` aggiunto a `requirements.txt`.
+- [x] `del st.session_state[...]` → `.pop(..., None)`.
+- [x] Suite pytest minima (`tests/`) + CI GitHub Actions.
 
 ## 🟡 Priorità media (pulizia e coerenza)
 
-- [ ] Import morti: `lru_cache` in `core/web_search.py`, `run_parallel` in `app.py`.
-- [ ] `altair` usato in `app.py` ma assente da `requirements.txt` (oggi è dipendenza
-  transitiva di Streamlit — esplicitarla).
-- [ ] Deserializzazione JSON incoerente: `json_to_results` usa `json.loads` raw mentre
-  altrove si usa `parse_json_response`; uniformare la gestione errori.
-- [ ] Pattern `del st.session_state[...]` + `st.rerun()` in più punti: usare `.pop(..., None)`
-  per evitare KeyError in edge case.
+- [ ] Deserializzazione JSON: `json_to_results` legge l'envelope salvato dall'app con
+  `json.loads` diretto (corretto, è formato nostro non output LLM) — nessuna azione
+  necessaria, chiuso come non-issue.
 
 ## 🟢 Scalabilità / produzione (vedi anche recap simulazione→produzione in chat)
 
