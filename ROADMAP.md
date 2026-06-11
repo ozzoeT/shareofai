@@ -25,17 +25,39 @@ bug nascosti oggi diventano incidenti silenziosi domani su dati di clienti reali
 **Obiettivo:** trasformare il tool da analisi one-shot a tracking nel tempo — è ciò che
 giustifica un abbonamento ricorrente invece di una consulenza spot.
 
-- **Storico run**: persistere ogni run (SQLite per partire) invece di solo l'ultima in sessione
-- **Trend per brand**: grafico "Share of AI nel tempo" — % di prompt in cui il brand è
-  preferito, per modello/tono/categoria, su più run
-- **Run schedulate**: esecuzione automatica periodica (settimanale) — riusa lo streaming
-  + autosave già implementati
-- **Alert base**: notifica se un brand perde/guadagna posizioni rispetto alla run precedente
+### Decisioni architetturali (deep dive 2026-06-11)
+
+- **Storage**: SQLite, `data/history.db` (gitignored). Due tabelle:
+  - `runs`: id, timestamp, label opzionale, modelli usati, hash del prompt set
+  - `results`: run_id (FK), model, prompt_index, tone, language, category,
+    `preferred_brand` **grezzo** (non normalizzato), confidence, decision,
+    campi `source_evaluation`, web_search_used
+- **Normalizzazione a query-time, non a salvataggio**: il brand grezzo è salvato
+  così com'è; la mappatura verso i brand group viene applicata al momento di
+  disegnare i grafici, usando i brand groups *correnti*. Così se l'utente
+  rinomina/aggrega un brand oggi, lo storico si aggiorna subito senza migrazioni.
+- **"Share of AI nel tempo"**: per ogni run, % di prompt in cui ogni brand
+  (normalizzato) è `preferred_brand`, filtrabile per tono/modello/categoria.
+  Grafico a linee: x = timestamp run, y = %, una linea per brand.
+- **Flusso utente**: bottone "💾 Salva nello storico" dopo una run (o da JSON
+  caricato) → insert in SQLite. Nuovo tab "📈 Storico" con tabella run passate
+  + grafico trend. L'export JSON esistente resta come backup/portabilità.
+
+### Sotto-fasi
+
+- **1a** (1 sessione): SQLite + salvataggio run + tab Storico con tabella run
+  passate e grafico trend base ("Share of AI" per brand nel tempo, senza filtri)
+- **1b** (1 sessione): filtri avanzati sul trend (tono/categoria/modello) +
+  confronto run-vs-run con diff
+- **1c** (1 sessione): run schedulate (settimanali, riusano streaming +
+  autosave già implementati) + alert base ("Brand X: -12pp nel tono
+  'technical' rispetto alla run precedente")
 
 **Valore vendibile:** "monitora la tua presenza nell'AI nel tempo, non solo oggi" —
-il pitch principale di un abbonamento mensile.
+il pitch principale di un abbonamento mensile. Già la 1a da sola è dimostrabile
+a un cliente.
 
-**Effort:** 2-3 sessioni (DB + scheduling + UI trend).
+**Effort:** 3 sessioni (1a + 1b + 1c).
 
 ---
 
